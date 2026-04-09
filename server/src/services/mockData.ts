@@ -5,7 +5,11 @@ import type {
   DashboardConfig,
   LayoutConfig,
   ThresholdConfig,
+  FilterState,
+  CategoricalSnapshot,
+  CategoryBreakdown,
 } from '../../../shared/types.js';
+import { VEHICLE_MAKES, VEHICLE_MODELS } from '../../../shared/types.js';
 
 interface MetricDefinition {
   id: string;
@@ -122,6 +126,109 @@ export function getCanonicalConfig(): DashboardConfig {
     },
     metrics,
     layout,
+  };
+}
+
+// === Categorical Data Generation ===
+
+function seededRandom(seed: string): () => number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = ((h << 5) - h + seed.charCodeAt(i)) | 0;
+  }
+  return () => {
+    h = (h * 1664525 + 1013904223) | 0;
+    return ((h >>> 0) / 4294967296);
+  };
+}
+
+function generateBreakdown(category: string, labels: string[], baseValue: number, noise: number): CategoryBreakdown {
+  const rng = seededRandom(category + new Date().toISOString().slice(0, 13));
+  return {
+    category,
+    values: labels.map(label => ({
+      label,
+      value: parseFloat((baseValue + (rng() - 0.5) * noise * 2).toFixed(1)),
+    })),
+  };
+}
+
+function getLast7Days(): string[] {
+  const days: string[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+function applyFilterMultiplier(filters: FilterState): number {
+  // Simulate filters affecting metric values slightly
+  let mult = 1.0;
+  if (filters.make) {
+    const idx = VEHICLE_MAKES.indexOf(filters.make as any);
+    mult += (idx - 2) * 0.03; // different makes shift values slightly
+  }
+  if (filters.model) {
+    mult += (filters.model.length % 3 - 1) * 0.02;
+  }
+  return mult;
+}
+
+export function generateCategoricalSnapshot(
+  metricIds?: string[],
+  filters?: FilterState
+): CategoricalSnapshot {
+  const appliedFilters = filters || {};
+  const mult = applyFilterMultiplier(appliedFilters);
+
+  const defs = metricIds
+    ? METRIC_DEFS.filter((d) => metricIds.includes(d.id))
+    : METRIC_DEFS;
+
+  const metrics: Record<string, MetricValue> = {};
+  for (const def of defs) {
+    const val = generateMetricValue(def);
+    metrics[def.id] = {
+      current: parseFloat((val.current * mult).toFixed(2)),
+      trend: val.trend.map(t => parseFloat((t * mult).toFixed(2))),
+      delta: val.delta,
+    };
+  }
+
+  // Filter models based on selected make
+  const makes = VEHICLE_MAKES as unknown as string[];
+  const models = appliedFilters.make
+    ? VEHICLE_MODELS[appliedFilters.make as keyof typeof VEHICLE_MODELS] || []
+    : ['Camry', 'Civic', 'F-150', 'Silverado', '3 Series', 'Model 3'];
+
+  const dates = getLast7Days();
+
+  // Generate breakdowns for a representative metric
+  const throughputBase = 12;
+  const qualityBase = 85;
+
+  return {
+    timestamp: new Date().toISOString(),
+    filters: appliedFilters,
+    metrics,
+    breakdowns: {
+      byMake: generateBreakdown('make', makes, throughputBase, 4),
+      byModel: generateBreakdown('model', models, throughputBase, 3),
+      byDate: generateBreakdown('date', dates, throughputBase, 2),
+    },
+  };
+}
+
+export function getAvailableFilters() {
+  return {
+    makes: [...VEHICLE_MAKES],
+    models: VEHICLE_MODELS,
+    dateRange: {
+      min: getLast7Days()[0],
+      max: getLast7Days()[6],
+    },
   };
 }
 

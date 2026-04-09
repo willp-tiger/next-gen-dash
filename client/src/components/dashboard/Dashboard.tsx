@@ -3,13 +3,18 @@ import type {
   DashboardConfig,
   MetricsSnapshot,
   MetricValue,
+  MetricConfig,
+  FilterState,
   RefinementSuggestion,
 } from 'shared/types';
 import { getMetrics, getCanonicalView } from '../../api/client';
 import { ViewToggle } from './ViewToggle';
 import { MetricTile } from './MetricTile';
 import { ChartTile } from './ChartTile';
+import { BreakdownChart } from './BreakdownChart';
+import { FilterBar } from './FilterBar';
 import { RefinementBanner } from '../refinement/RefinementBanner';
+import { DashboardChat } from './DashboardChat';
 
 interface DashboardProps {
   config: DashboardConfig;
@@ -23,16 +28,24 @@ export function Dashboard({ config, userId }: DashboardProps) {
   const [activeConfig, setActiveConfig] = useState<DashboardConfig>(config);
   const [snapshot, setSnapshot] = useState<MetricsSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState<FilterState>({});
+  const [showFilters, setShowFilters] = useState(false);
 
   // Keep user config in sync with prop
   useEffect(() => {
     if (!isCanonical) setActiveConfig(config);
   }, [config, isCanonical]);
 
+  // Show filter bar when any metric has a filter or breakdown
+  useEffect(() => {
+    const hasBreakdown = activeConfig.metrics.some(m => m.chartType === 'breakdown' || m.filterBy);
+    if (hasBreakdown && !showFilters) setShowFilters(true);
+  }, [activeConfig.metrics, showFilters]);
+
   const fetchMetrics = useCallback(async () => {
     try {
       const ids = activeConfig.metrics
-        .filter((m) => m.visible)
+        .filter((m) => m.visible && m.chartType !== 'breakdown')
         .map((m) => m.id);
       const data = await getMetrics(ids);
       setSnapshot(data);
@@ -59,7 +72,6 @@ export function Dashboard({ config, userId }: DashboardProps) {
         const canonicalConfig = await getCanonicalView();
         setActiveConfig(canonicalConfig);
       } catch {
-        // fallback to user config
         setIsCanonical(false);
       }
     } else {
@@ -68,7 +80,6 @@ export function Dashboard({ config, userId }: DashboardProps) {
   };
 
   const handleAcceptSuggestion = (suggestion: RefinementSuggestion) => {
-    // Apply the suggested change to the active config
     setActiveConfig((prev) => {
       const existingIndex = prev.metrics.findIndex(
         (m) => m.id === suggestion.metricId
@@ -101,9 +112,34 @@ export function Dashboard({ config, userId }: DashboardProps) {
     });
   };
 
+  const handleConfigUpdate = (newConfig: DashboardConfig) => {
+    setActiveConfig(newConfig);
+    // If new config has filters, apply them
+    const filterMetric = newConfig.metrics.find(m => m.filterBy);
+    if (filterMetric?.filterBy) {
+      setFilters(filterMetric.filterBy);
+      setShowFilters(true);
+    }
+    // If any breakdown chart added, show filter bar
+    if (newConfig.metrics.some(m => m.chartType === 'breakdown')) {
+      setShowFilters(true);
+    }
+  };
+
+  // Apply global filters to breakdown metrics
+  const applyGlobalFilters = (metric: MetricConfig): MetricConfig => {
+    if (metric.chartType === 'breakdown') {
+      return { ...metric, filterBy: { ...metric.filterBy, ...filters } };
+    }
+    return metric;
+  };
+
   const visibleMetrics = activeConfig.metrics
     .filter((m) => m.visible)
     .sort((a, b) => a.position - b.position);
+
+  const standardMetrics = visibleMetrics.filter(m => m.chartType !== 'breakdown');
+  const breakdownMetrics = visibleMetrics.filter(m => m.chartType === 'breakdown');
 
   const cols = activeConfig.layout?.columns ?? 3;
   const gridClass = `grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-${cols} lg:grid-cols-${cols}`;
@@ -118,6 +154,11 @@ export function Dashboard({ config, userId }: DashboardProps) {
         )}
       </div>
 
+      {/* Filter bar - shown when breakdown charts exist */}
+      {showFilters && (
+        <FilterBar filters={filters} onFilterChange={setFilters} />
+      )}
+
       {/* Refinement banner */}
       <RefinementBanner userId={userId} onAccept={handleAcceptSuggestion} />
 
@@ -128,10 +169,10 @@ export function Dashboard({ config, userId }: DashboardProps) {
         </div>
       )}
 
-      {/* Metrics grid */}
-      {snapshot && (
+      {/* Standard metrics grid */}
+      {snapshot && standardMetrics.length > 0 && (
         <div className={gridClass}>
-          {visibleMetrics.map((metric) => {
+          {standardMetrics.map((metric) => {
             const val = snapshot.metrics[metric.id] ?? EMPTY_VALUE;
             const isChart =
               metric.chartType === 'line' ||
@@ -156,6 +197,29 @@ export function Dashboard({ config, userId }: DashboardProps) {
           })}
         </div>
       )}
+
+      {/* Breakdown charts section */}
+      {breakdownMetrics.length > 0 && (
+        <div>
+          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-500">
+            Breakdowns
+          </h3>
+          <div className={gridClass}>
+            {breakdownMetrics.map((metric) => (
+              <BreakdownChart
+                key={`${metric.id}-${metric.breakdownBy}`}
+                metric={applyGlobalFilters(metric)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Dashboard chat for modifying KPIs */}
+      <DashboardChat
+        userId={userId}
+        onConfigUpdate={handleConfigUpdate}
+      />
     </div>
   );
 }

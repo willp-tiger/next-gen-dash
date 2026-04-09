@@ -25,11 +25,13 @@ export interface MetricConfig {
   id: string;
   label: string;
   unit: string;
-  chartType: 'number' | 'line' | 'bar' | 'area' | 'gauge';
+  chartType: 'number' | 'line' | 'bar' | 'area' | 'gauge' | 'breakdown';
   size: 'sm' | 'md' | 'lg';
   thresholds: ThresholdConfig;
   position: number;
   visible: boolean;
+  breakdownBy?: 'make' | 'model' | 'date';
+  filterBy?: FilterState;
 }
 
 export interface ThresholdConfig {
@@ -75,6 +77,43 @@ export interface RefinementSuggestion {
   suggestedChange: Partial<MetricConfig>;
   status: 'pending' | 'accepted' | 'dismissed';
 }
+
+// === Categorical / Filter Types ===
+
+export interface FilterState {
+  make?: string;
+  model?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export interface CategoryBreakdown {
+  category: string;
+  values: { label: string; value: number }[];
+}
+
+export interface CategoricalSnapshot {
+  timestamp: string;
+  filters: FilterState;
+  metrics: Record<string, MetricValue>;
+  breakdowns: {
+    byMake: CategoryBreakdown;
+    byModel: CategoryBreakdown;
+    byDate: CategoryBreakdown;
+  };
+}
+
+export const VEHICLE_MAKES = ['Toyota', 'Honda', 'Ford', 'Chevrolet', 'BMW', 'Tesla'] as const;
+export type VehicleMake = (typeof VEHICLE_MAKES)[number];
+
+export const VEHICLE_MODELS: Record<VehicleMake, string[]> = {
+  Toyota: ['Camry', 'Corolla', 'RAV4', 'Highlander'],
+  Honda: ['Civic', 'Accord', 'CR-V', 'Pilot'],
+  Ford: ['F-150', 'Mustang', 'Explorer', 'Escape'],
+  Chevrolet: ['Silverado', 'Malibu', 'Equinox', 'Tahoe'],
+  BMW: ['3 Series', '5 Series', 'X3', 'X5'],
+  Tesla: ['Model 3', 'Model Y', 'Model S', 'Model X'],
+};
 
 // === API Request/Response Types ===
 

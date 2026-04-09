@@ -4,13 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --import ./src/env.ts src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "cors": "^2.8.5",
+    "dotenv": "^17.4.1",
     "express": "^4.21.0",
     "uuid": "^11.1.0"
   },

@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { DashboardConfig } from 'shared/types';
-import { interpretPrompt } from '../../api/client';
+import { chatMessage, interpretPrompt } from '../../api/client';
 
 interface OnboardingFlowProps {
   userId: string;
@@ -12,87 +12,81 @@ interface Message {
   text: string;
 }
 
-const QUESTIONS = [
-  "Tell me about your role. What does your day-to-day look like managing queues?",
-  "When you think about queue health, what worries you the most? What's the first thing you check?",
-  "Do you have specific numbers in mind? For example, 'wait times over 5 minutes are bad' or 'we need 90% SLA compliance'.",
-];
-
 export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
-  const [questionIndex, setQuestionIndex] = useState(0);
-  const [isTyping, setIsTyping] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
-  const [answers, setAnswers] = useState<string[]>([]);
+  const [isTyping, setIsTyping] = useState(false);
+  const [isBuilding, setIsBuilding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const initialized = useRef(false);
 
-  const scrollToBottom = useCallback(() => {
+  // Scroll to bottom on new messages
+  useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, []);
+  }, [messages, isTyping, isBuilding]);
 
-  // Show first question on mount
+  // Focus input when ready
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setMessages([{ role: 'assistant', text: QUESTIONS[0] }]);
-      setIsTyping(false);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, isTyping, scrollToBottom]);
-
-  useEffect(() => {
-    if (!isTyping && !isLoading) {
+    if (!isTyping && !isBuilding) {
       inputRef.current?.focus();
     }
-  }, [isTyping, isLoading]);
+  }, [isTyping, isBuilding]);
+
+  // Kick off the conversation with the LLM's first question
+  useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+
+    setIsTyping(true);
+    chatMessage(userId, '[START]').then((res) => {
+      setMessages([{ role: 'assistant', text: res.reply }]);
+      setIsTyping(false);
+    }).catch(() => {
+      setMessages([{ role: 'assistant', text: "Hi! Tell me about your role and what you need to monitor." }]);
+      setIsTyping(false);
+    });
+  }, [userId]);
 
   const handleSend = async () => {
     const trimmed = input.trim();
-    if (!trimmed || isTyping || isLoading) return;
+    if (!trimmed || isTyping || isBuilding) return;
 
-    const newAnswers = [...answers, trimmed];
-    setAnswers(newAnswers);
     setInput('');
+    setError(null);
     setMessages((prev) => [...prev, { role: 'user', text: trimmed }]);
+    setIsTyping(true);
 
-    const nextIndex = questionIndex + 1;
+    try {
+      const res = await chatMessage(userId, trimmed);
 
-    if (nextIndex < QUESTIONS.length) {
-      setIsTyping(true);
-      setQuestionIndex(nextIndex);
-      setTimeout(() => {
-        setMessages((prev) => [
-          ...prev,
-          { role: 'assistant', text: QUESTIONS[nextIndex] },
-        ]);
-        setIsTyping(false);
-      }, 300);
-    } else {
-      // All questions answered - build dashboard
-      setIsLoading(true);
-      try {
-        const fullPrompt = newAnswers
-          .map((a, i) => `Q: ${QUESTIONS[i]}\nA: ${a}`)
-          .join('\n\n');
-        const response = await interpretPrompt(userId, fullPrompt);
-        onComplete(response.config);
-      } catch (err) {
-        setIsLoading(false);
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            text: 'Something went wrong building your dashboard. Please try again.',
-          },
-        ]);
+      if (res.reply) {
+        setMessages((prev) => [...prev, { role: 'assistant', text: res.reply }]);
       }
+      setIsTyping(false);
+
+      if (res.isReady && res.transcript) {
+        // LLM says it has enough info - build the dashboard
+        setIsBuilding(true);
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', text: "Great, I have everything I need. Let me build your dashboard..." },
+        ]);
+
+        const response = await interpretPrompt(userId, res.transcript);
+        onComplete(response.config);
+      }
+    } catch (err) {
+      setIsTyping(false);
+      setIsBuilding(false);
+      setError('Something went wrong. Please try again.');
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', text: 'Sorry, something went wrong. Could you try that again?' },
+      ]);
     }
   };
 
@@ -111,7 +105,7 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
           Let&apos;s build your dashboard
         </h2>
         <p className="mt-1 text-sm text-gray-500">
-          Answer a few questions so we can personalize your view
+          Tell me what you need to monitor and I&apos;ll personalize your view
         </p>
       </div>
 
@@ -149,11 +143,11 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
           </div>
         )}
 
-        {isLoading && (
+        {isBuilding && (
           <div className="flex flex-col items-center gap-3 py-8">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
             <p className="text-sm font-medium text-gray-600">
-              Building your dashboard...
+              Building your personalized dashboard...
             </p>
           </div>
         )}
@@ -167,13 +161,13 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          disabled={isTyping || isLoading}
-          placeholder={isLoading ? 'Building...' : 'Type your answer...'}
+          disabled={isTyping || isBuilding}
+          placeholder={isBuilding ? 'Building your dashboard...' : 'Type your answer...'}
           className="flex-1 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:bg-gray-50"
         />
         <button
           onClick={handleSend}
-          disabled={!input.trim() || isTyping || isLoading}
+          disabled={!input.trim() || isTyping || isBuilding}
           className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Send

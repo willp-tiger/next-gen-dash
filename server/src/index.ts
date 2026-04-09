@@ -3,13 +3,15 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 import interpretRouter from './routes/interpret.js';
 import dashboardRouter from './routes/dashboard.js';
 import metricsRouter from './routes/metrics.js';
 import refinementRouter from './routes/refinement.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import chatRouter from './routes/chat.js';
+import dashboardChatRouter from './routes/dashboardChat.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -23,6 +25,8 @@ app.use('/api/interpret', interpretRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/metrics', metricsRouter);
 app.use('/api/refinement', refinementRouter);
+app.use('/api/chat', chatRouter);
+app.use('/api/dashboard-chat', dashboardChatRouter);
 
 // Production: serve static frontend
 if (process.env.NODE_ENV === 'production') {
