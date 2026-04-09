@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply min-h-screen;
+  }
+}
+
+@layer utilities {
+  @keyframes slide-in {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-slide-in {
+    animation: slide-in 0.3s ease-out;
+  }
+}
+
+@layer components {
+  .health-badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+  .health-badge-healthy {
+    @apply bg-emerald-100 text-emerald-800;
+  }
+  .health-badge-warning {
+    @apply bg-amber-100 text-amber-800;
+  }
+  .health-badge-critical {
+    @apply bg-red-100 text-red-800;
+  }
+}

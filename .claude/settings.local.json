@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ':*)",
+      "Bash(npm --version)",
+      "Bash(gh --version)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(timeout 5 npx tsx server/src/index.ts)",
+      "Bash(npx tsx:*)",
+      "Bash(curl -s http://localhost:3000/api/metrics)",
+      "Read(//c/Users/Will Powell/next-gen-dash/**)",
+      "Bash(wait)"
+    ]
+  }
+}
