@@ -12,6 +12,7 @@ import metricsRouter from './routes/metrics.js';
 import refinementRouter from './routes/refinement.js';
 import chatRouter from './routes/chat.js';
 import dashboardChatRouter from './routes/dashboardChat.js';
+import lookerRouter from './routes/looker.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -27,6 +28,7 @@ app.use('/api/metrics', metricsRouter);
 app.use('/api/refinement', refinementRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/dashboard-chat', dashboardChatRouter);
+app.use('/api/looker', lookerRouter);
 
 // Production: serve static frontend
 if (process.env.NODE_ENV === 'production') {

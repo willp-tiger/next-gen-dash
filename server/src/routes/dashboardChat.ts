@@ -3,6 +3,8 @@ import type { Request, Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import { DASHBOARD_CHAT_SYSTEM_PROMPT } from '../prompts/dashboardChat.js';
 import { getConfig, setConfig } from '../services/configStore.js';
+// Looker context is optional - only enriches prompts when connected
+import { isLookerConfigured } from '../services/looker.js';
 import type { DashboardConfig, MetricConfig } from '../../../shared/types.js';
 
 const router = Router();

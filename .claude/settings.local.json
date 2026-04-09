@@ -10,7 +10,9 @@
       "Bash(npx tsx:*)",
       "Bash(curl -s http://localhost:3000/api/metrics)",
       "Read(//c/Users/Will Powell/next-gen-dash/**)",
-      "Bash(wait)"
+      "Bash(wait)",
+      "Bash(npm test:*)",
+      "WebSearch"
     ]
   }
 }

@@ -1,9 +1,12 @@
+import type { ReactNode } from 'react';
+
 interface HeaderProps {
   phase: 'onboarding' | 'review' | 'dashboard';
   onReset: () => void;
+  extra?: ReactNode;
 }
 
-export function Header({ phase, onReset }: HeaderProps) {
+export function Header({ phase, onReset, extra }: HeaderProps) {
   return (
     <header className="border-b border-gray-200 bg-white">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
@@ -28,14 +31,17 @@ export function Header({ phase, onReset }: HeaderProps) {
           </h1>
         </div>
 
-        {phase !== 'onboarding' && (
-          <button
-            onClick={onReset}
-            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
-          >
-            Start Over
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {extra}
+          {phase !== 'onboarding' && (
+            <button
+              onClick={onReset}
+              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
+            >
+              Start Over
+            </button>
+          )}
+        </div>
       </div>
     </header>
   );

@@ -7,7 +7,7 @@ import type {
   FilterState,
   RefinementSuggestion,
 } from 'shared/types';
-import { getMetrics, getCanonicalView } from '../../api/client';
+import { getMetrics, getCanonicalView, getDataSource } from '../../api/client';
 import { ViewToggle } from './ViewToggle';
 import { MetricTile } from './MetricTile';
 import { ChartTile } from './ChartTile';
@@ -30,6 +30,12 @@ export function Dashboard({ config, userId }: DashboardProps) {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<FilterState>({});
   const [showFilters, setShowFilters] = useState(false);
+  const [dataSource, setDataSource] = useState<'mock' | 'looker'>('mock');
+
+  // Check data source on mount
+  useEffect(() => {
+    getDataSource().then(d => setDataSource(d.source)).catch(() => {});
+  }, []);
 
   // Keep user config in sync with prop
   useEffect(() => {
@@ -148,7 +154,16 @@ export function Dashboard({ config, userId }: DashboardProps) {
     <div className="space-y-4">
       {/* Top bar */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">Dashboard</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-semibold text-gray-900">Dashboard</h2>
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+            dataSource === 'looker'
+              ? 'bg-blue-100 text-blue-700'
+              : 'bg-gray-100 text-gray-600'
+          }`}>
+            {dataSource === 'looker' ? 'Looker' : 'Demo Data'}
+          </span>
+        </div>
         {activeConfig.layout?.showCanonicalToggle !== false && (
           <ViewToggle isCanonical={isCanonical} onToggle={handleToggle} />
         )}

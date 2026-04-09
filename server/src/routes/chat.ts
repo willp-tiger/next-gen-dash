@@ -71,7 +71,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 // Reset conversation
 router.delete('/:userId', (req: Request, res: Response) => {
-  conversations.delete(req.params.userId);
+  conversations.delete(req.params.userId as string);
   res.json({ ok: true });
 });
 

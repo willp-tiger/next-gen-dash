@@ -91,6 +91,25 @@ export function getAvailableFilters() {
   return fetchJson<{ makes: string[]; models: Record<string, string[]>; dateRange: { min: string; max: string } }>('/metrics/filters');
 }
 
+export function getDataSource() {
+  return fetchJson<{ source: 'looker' | 'mock'; looker: { available: boolean; error: string | null } }>('/metrics/source');
+}
+
+export function getLookerStatus() {
+  return fetchJson<{ configured: boolean; env: Record<string, boolean> }>('/looker/status');
+}
+
+export function lookerChat(userId: string, message: string) {
+  return fetchJson<{
+    message: string;
+    toolCalls: { name: string; input: any; result: string }[];
+    dashboardUrl: string | null;
+  }>(`/looker/chat/${userId}`, {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+  });
+}
+
 export function dashboardChat(userId: string, message: string) {
   return fetchJson<{ message: string; action: string | null; config: DashboardConfig | null }>(
     `/dashboard-chat/${userId}`,
