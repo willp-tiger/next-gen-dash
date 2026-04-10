@@ -1,11 +1,38 @@
 import { useState, useRef, useEffect } from 'react';
 import type { DashboardConfig } from 'shared/types';
-import { chatMessage, interpretPrompt } from '../../api/client';
+import { chatMessage, interpretPrompt, getPersonaConfigs } from '../../api/client';
 
 interface OnboardingFlowProps {
   userId: string;
   onComplete: (config: DashboardConfig) => void;
 }
+
+const PERSONA_CARDS = [
+  {
+    key: 'sales-rep',
+    title: 'Sales Rep',
+    description: 'Revenue, orders, deal sizes, and units sold',
+    icon: 'M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z',
+    metrics: '6 metrics',
+    color: 'indigo',
+  },
+  {
+    key: 'director',
+    title: 'Sales Director',
+    description: 'Fulfillment rates, territory balance, and customer value',
+    icon: 'M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6',
+    metrics: '6 metrics',
+    color: 'violet',
+  },
+  {
+    key: 'executive',
+    title: 'Executive',
+    description: 'Revenue growth, pricing efficiency, and customer economics',
+    icon: 'M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941',
+    metrics: '5 metrics',
+    color: 'emerald',
+  },
+];
 
 interface Message {
   role: 'assistant' | 'user';
@@ -19,6 +46,23 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
   const [isBuilding, setIsBuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showExamples, setShowExamples] = useState(true);
+  const [mode, setMode] = useState<'pick' | 'chat'>('pick');
+  const [personas, setPersonas] = useState<Record<string, DashboardConfig> | null>(null);
+  const [loadingPersona, setLoadingPersona] = useState<string | null>(null);
+
+  // Load persona configs on mount
+  useEffect(() => {
+    getPersonaConfigs().then(setPersonas).catch(() => {});
+  }, []);
+
+  const handlePersonaPick = (key: string) => {
+    if (!personas?.[key]) return;
+    setLoadingPersona(key);
+    // Small delay so the user sees the selection
+    setTimeout(() => {
+      onComplete(personas[key]);
+    }, 600);
+  };
 
   const EXAMPLE_PROMPTS = [
     "I'm a sales rep -- I care about revenue and deal sizes",
@@ -149,12 +193,88 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
     }
   };
 
+  if (mode === 'pick') {
+    const colorMap: Record<string, { bg: string; border: string; icon: string; ring: string }> = {
+      indigo: { bg: 'bg-indigo-50', border: 'border-indigo-200 hover:border-indigo-400', icon: 'bg-indigo-100 text-indigo-600', ring: 'ring-indigo-500' },
+      violet: { bg: 'bg-violet-50', border: 'border-violet-200 hover:border-violet-400', icon: 'bg-violet-100 text-violet-600', ring: 'ring-violet-500' },
+      emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200 hover:border-emerald-400', icon: 'bg-emerald-100 text-emerald-600', ring: 'ring-emerald-500' },
+    };
+
+    return (
+      <div className="mx-auto max-w-3xl py-8">
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-bold text-gray-900">Choose a dashboard</h2>
+          <p className="mt-2 text-sm text-gray-500">Pick a pre-built view for your role, or build a custom one with AI</p>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          {PERSONA_CARDS.map(card => {
+            const c = colorMap[card.color];
+            const isLoading = loadingPersona === card.key;
+            return (
+              <button
+                key={card.key}
+                onClick={() => handlePersonaPick(card.key)}
+                disabled={loadingPersona !== null}
+                className={`relative rounded-xl border-2 ${c.border} ${c.bg} p-5 text-left transition hover:shadow-lg disabled:opacity-60 ${isLoading ? `ring-2 ${c.ring}` : ''}`}
+              >
+                {isLoading && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-white/60">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600" />
+                  </div>
+                )}
+                <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${c.icon} mb-3`}>
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d={card.icon} />
+                  </svg>
+                </div>
+                <h3 className="text-sm font-semibold text-gray-900">{card.title}</h3>
+                <p className="mt-1 text-xs text-gray-500">{card.description}</p>
+                <div className="mt-3 flex items-center gap-2">
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-gray-500 ring-1 ring-gray-200">{card.metrics}</span>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-gray-500 ring-1 ring-gray-200">Real data</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center gap-4 mb-8">
+          <div className="flex-1 border-t border-gray-200" />
+          <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">or</span>
+          <div className="flex-1 border-t border-gray-200" />
+        </div>
+
+        <div className="text-center">
+          <button
+            onClick={() => setMode('chat')}
+            className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-6 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 hover:border-gray-400"
+          >
+            <svg className="h-4 w-4 text-indigo-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+            </svg>
+            Build a custom dashboard with AI
+          </button>
+          <p className="mt-2 text-xs text-gray-400">Describe your role and priorities in a conversation with Claude</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto flex max-w-2xl flex-col" style={{ height: 'calc(100vh - 140px)' }}>
       {/* Chat header */}
       <div className="mb-4 text-center">
+        <div className="flex items-center justify-center gap-3 mb-1">
+          <button
+            onClick={() => setMode('pick')}
+            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+          >
+            &larr; Back to dashboard picker
+          </button>
+        </div>
         <h2 className="text-xl font-semibold text-gray-900">
-          Let&apos;s build your dashboard
+          Build a custom dashboard
         </h2>
         <p className="mt-1 text-sm text-gray-500">
           Tell me what you need to monitor and I&apos;ll personalize your view
