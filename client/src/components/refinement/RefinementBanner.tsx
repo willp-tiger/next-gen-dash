@@ -32,10 +32,14 @@ export function RefinementBanner({ userId, onAccept }: RefinementBannerProps) {
     return () => clearInterval(interval);
   }, [fetchSuggestions]);
 
+  const suggestionExtra = suggestion
+    ? { userId: suggestion.userId, type: suggestion.type, metricId: suggestion.metricId }
+    : undefined;
+
   const handleAccept = async () => {
     if (!suggestion) return;
     try {
-      await updateSuggestion(suggestion.id, 'accepted');
+      await updateSuggestion(suggestion.id, 'accepted', suggestionExtra);
       onAccept(suggestion);
       setSuggestion(null);
     } catch {
@@ -46,7 +50,7 @@ export function RefinementBanner({ userId, onAccept }: RefinementBannerProps) {
   const handleDismiss = async () => {
     if (!suggestion) return;
     try {
-      await updateSuggestion(suggestion.id, 'dismissed');
+      await updateSuggestion(suggestion.id, 'dismissed', suggestionExtra);
       setDismissed(true);
     } catch {
       // ignore

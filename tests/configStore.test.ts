@@ -14,12 +14,12 @@ function makeConfig(userId: string): DashboardConfig {
     },
     metrics: [
       {
-        id: 'avg_wait_time',
-        label: 'Avg Wait Time',
-        unit: 'minutes',
+        id: 'total_revenue',
+        label: 'Total Revenue',
+        unit: 'dollars',
         chartType: 'line',
         size: 'lg',
-        thresholds: { green: { max: 3 }, yellow: { max: 5 }, direction: 'lower-is-better' },
+        thresholds: { green: { max: 300000 }, yellow: { max: 200000 }, direction: 'higher-is-better' },
         position: 0,
         visible: true,
       },

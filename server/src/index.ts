@@ -30,7 +30,7 @@ app.use('/api/dashboard-chat', dashboardChatRouter);
 
 // Production: serve static frontend
 if (process.env.NODE_ENV === 'production') {
-  const clientDist = path.resolve(__dirname, '../../client/dist');
+  const clientDist = path.resolve(process.cwd(), 'client/dist');
   app.use(express.static(clientDist));
   app.get('*', (_req, res) => {
     res.sendFile(path.join(clientDist, 'index.html'));

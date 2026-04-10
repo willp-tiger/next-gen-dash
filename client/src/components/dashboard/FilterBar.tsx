@@ -8,66 +8,63 @@ interface FilterBarProps {
 }
 
 export function FilterBar({ filters, onFilterChange }: FilterBarProps) {
-  const [makes, setMakes] = useState<string[]>([]);
-  const [models, setModels] = useState<Record<string, string[]>>({});
-  const [dateRange, setDateRange] = useState<{ min: string; max: string }>({ min: '', max: '' });
+  const [productLines, setProductLines] = useState<string[]>([]);
+  const [countries, setCountries] = useState<string[]>([]);
+  const [territories, setTerritories] = useState<string[]>([]);
+  const [dealSizes, setDealSizes] = useState<string[]>([]);
 
   useEffect(() => {
     getAvailableFilters().then(data => {
-      setMakes(data.makes);
-      setModels(data.models);
-      setDateRange(data.dateRange);
+      setProductLines(data.productLines);
+      setCountries(data.countries);
+      setTerritories(data.territories);
+      setDealSizes(data.dealSizes);
     }).catch(() => {});
   }, []);
 
-  const availableModels = filters.make ? (models[filters.make] || []) : [];
+  const hasFilters = filters.product_line || filters.country || filters.territory || filters.deal_size;
 
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-xl bg-white px-4 py-3 shadow-sm ring-1 ring-gray-200">
       <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Filters</span>
 
       <select
-        value={filters.make || ''}
-        onChange={e => onFilterChange({
-          ...filters,
-          make: e.target.value || undefined,
-          model: undefined, // reset model when make changes
-        })}
+        value={filters.product_line || ''}
+        onChange={e => onFilterChange({ ...filters, product_line: e.target.value || undefined })}
         className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/20"
       >
-        <option value="">All Makes</option>
-        {makes.map(m => <option key={m} value={m}>{m}</option>)}
+        <option value="">All Product Lines</option>
+        {productLines.map(p => <option key={p} value={p}>{p}</option>)}
       </select>
 
       <select
-        value={filters.model || ''}
-        onChange={e => onFilterChange({ ...filters, model: e.target.value || undefined })}
-        disabled={!filters.make}
-        className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 disabled:bg-gray-50 disabled:text-gray-400"
+        value={filters.territory || ''}
+        onChange={e => onFilterChange({ ...filters, territory: e.target.value || undefined })}
+        className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/20"
       >
-        <option value="">All Models</option>
-        {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
+        <option value="">All Territories</option>
+        {territories.map(t => <option key={t} value={t}>{t}</option>)}
       </select>
 
-      <input
-        type="date"
-        value={filters.dateFrom || ''}
-        min={dateRange.min}
-        max={dateRange.max}
-        onChange={e => onFilterChange({ ...filters, dateFrom: e.target.value || undefined })}
+      <select
+        value={filters.country || ''}
+        onChange={e => onFilterChange({ ...filters, country: e.target.value || undefined })}
         className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/20"
-      />
-      <span className="text-xs text-gray-400">to</span>
-      <input
-        type="date"
-        value={filters.dateTo || ''}
-        min={filters.dateFrom || dateRange.min}
-        max={dateRange.max}
-        onChange={e => onFilterChange({ ...filters, dateTo: e.target.value || undefined })}
-        className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/20"
-      />
+      >
+        <option value="">All Countries</option>
+        {countries.map(c => <option key={c} value={c}>{c}</option>)}
+      </select>
 
-      {(filters.make || filters.model || filters.dateFrom || filters.dateTo) && (
+      <select
+        value={filters.deal_size || ''}
+        onChange={e => onFilterChange({ ...filters, deal_size: e.target.value || undefined })}
+        className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/20"
+      >
+        <option value="">All Deal Sizes</option>
+        {dealSizes.map(d => <option key={d} value={d}>{d}</option>)}
+      </select>
+
+      {hasFilters && (
         <button
           onClick={() => onFilterChange({})}
           className="rounded-lg px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"

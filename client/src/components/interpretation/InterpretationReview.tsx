@@ -164,6 +164,13 @@ export function InterpretationReview({
                     </div>
                   </div>
 
+                  {/* Reasoning */}
+                  {metric.reasoning && (
+                    <p className="mt-2 text-xs italic text-gray-400">
+                      {metric.reasoning}
+                    </p>
+                  )}
+
                   {/* Size selector */}
                   <div className="mt-3 flex items-center gap-1">
                     <span className="mr-2 text-xs text-gray-500">Size:</span>

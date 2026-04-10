@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type {
   DashboardConfig,
   MetricsSnapshot,
@@ -10,11 +10,15 @@ import type {
 import { getMetrics, getCanonicalView } from '../../api/client';
 import { ViewToggle } from './ViewToggle';
 import { MetricTile } from './MetricTile';
+import { GaugeTile } from './GaugeTile';
 import { ChartTile } from './ChartTile';
 import { BreakdownChart } from './BreakdownChart';
+import { HeatMapChart } from './HeatMapChart';
 import { FilterBar } from './FilterBar';
 import { RefinementBanner } from '../refinement/RefinementBanner';
 import { DashboardChat } from './DashboardChat';
+import { SkeletonGrid } from './SkeletonTile';
+import { PersonaSelector } from './PersonaSelector';
 
 interface DashboardProps {
   config: DashboardConfig;
@@ -25,11 +29,33 @@ const EMPTY_VALUE: MetricValue = { current: 0, trend: [], delta: 0 };
 
 export function Dashboard({ config, userId }: DashboardProps) {
   const [isCanonical, setIsCanonical] = useState(false);
+  const [activePersona, setActivePersona] = useState<string | null>(null);
   const [activeConfig, setActiveConfig] = useState<DashboardConfig>(config);
   const [snapshot, setSnapshot] = useState<MetricsSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<FilterState>({});
   const [showFilters, setShowFilters] = useState(false);
+
+  // Track previous metric IDs for animation
+  const prevMetricIds = useRef<Set<string>>(new Set());
+  const [animatedIds, setAnimatedIds] = useState<Set<string>>(new Set());
+
+  // Detect new/changed metrics and animate them
+  useEffect(() => {
+    const currentIds = new Set(activeConfig.metrics.filter(m => m.visible).map(m => m.id));
+    const newIds = new Set<string>();
+    for (const id of currentIds) {
+      if (!prevMetricIds.current.has(id)) {
+        newIds.add(id);
+      }
+    }
+    if (newIds.size > 0) {
+      setAnimatedIds(newIds);
+      const timer = setTimeout(() => setAnimatedIds(new Set()), 500);
+      return () => clearTimeout(timer);
+    }
+    prevMetricIds.current = currentIds;
+  }, [activeConfig.metrics]);
 
   // Keep user config in sync with prop
   useEffect(() => {
@@ -38,7 +64,7 @@ export function Dashboard({ config, userId }: DashboardProps) {
 
   // Show filter bar when any metric has a filter or breakdown
   useEffect(() => {
-    const hasBreakdown = activeConfig.metrics.some(m => m.chartType === 'breakdown' || m.filterBy);
+    const hasBreakdown = activeConfig.metrics.some(m => m.chartType === 'breakdown' || m.chartType === 'heatmap' || m.filterBy);
     if (hasBreakdown && !showFilters) setShowFilters(true);
   }, [activeConfig.metrics, showFilters]);
 
@@ -67,6 +93,7 @@ export function Dashboard({ config, userId }: DashboardProps) {
   // Toggle canonical view
   const handleToggle = async (canonical: boolean) => {
     setIsCanonical(canonical);
+    setActivePersona(null);
     if (canonical) {
       try {
         const canonicalConfig = await getCanonicalView();
@@ -77,6 +104,20 @@ export function Dashboard({ config, userId }: DashboardProps) {
     } else {
       setActiveConfig(config);
     }
+  };
+
+  const handlePersonaSelect = (personaConfig: DashboardConfig | null) => {
+    if (!personaConfig) {
+      setActivePersona(null);
+      setIsCanonical(false);
+      setActiveConfig(config);
+      return;
+    }
+    // Determine persona key from userId
+    const key = personaConfig.userId.replace('persona-', '');
+    setActivePersona(key);
+    setIsCanonical(false);
+    setActiveConfig(personaConfig);
   };
 
   const handleAcceptSuggestion = (suggestion: RefinementSuggestion) => {
@@ -121,14 +162,14 @@ export function Dashboard({ config, userId }: DashboardProps) {
       setShowFilters(true);
     }
     // If any breakdown chart added, show filter bar
-    if (newConfig.metrics.some(m => m.chartType === 'breakdown')) {
+    if (newConfig.metrics.some(m => m.chartType === 'breakdown' || m.chartType === 'heatmap')) {
       setShowFilters(true);
     }
   };
 
-  // Apply global filters to breakdown metrics
+  // Apply global filters to breakdown/heatmap metrics
   const applyGlobalFilters = (metric: MetricConfig): MetricConfig => {
-    if (metric.chartType === 'breakdown') {
+    if (metric.chartType === 'breakdown' || metric.chartType === 'heatmap') {
       return { ...metric, filterBy: { ...metric.filterBy, ...filters } };
     }
     return metric;
@@ -138,8 +179,8 @@ export function Dashboard({ config, userId }: DashboardProps) {
     .filter((m) => m.visible)
     .sort((a, b) => a.position - b.position);
 
-  const standardMetrics = visibleMetrics.filter(m => m.chartType !== 'breakdown');
-  const breakdownMetrics = visibleMetrics.filter(m => m.chartType === 'breakdown');
+  const standardMetrics = visibleMetrics.filter(m => m.chartType !== 'breakdown' && m.chartType !== 'heatmap');
+  const breakdownMetrics = visibleMetrics.filter(m => m.chartType === 'breakdown' || m.chartType === 'heatmap');
 
   const cols = activeConfig.layout?.columns ?? 3;
   const gridClass = `grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-${cols} lg:grid-cols-${cols}`;
@@ -148,10 +189,22 @@ export function Dashboard({ config, userId }: DashboardProps) {
     <div className="space-y-4">
       {/* Top bar */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">Dashboard</h2>
-        {activeConfig.layout?.showCanonicalToggle !== false && (
-          <ViewToggle isCanonical={isCanonical} onToggle={handleToggle} />
-        )}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">
+            {activePersona
+              ? `${activePersona.charAt(0).toUpperCase() + activePersona.slice(1)} View`
+              : 'Dashboard'}
+          </h2>
+          {activePersona && (
+            <p className="text-xs text-gray-500">{activeConfig.interpretation.summary}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <PersonaSelector onSelect={handlePersonaSelect} activePersona={activePersona} />
+          {activeConfig.layout?.showCanonicalToggle !== false && (
+            <ViewToggle isCanonical={isCanonical} onToggle={handleToggle} />
+          )}
+        </div>
       </div>
 
       {/* Filter bar - shown when breakdown charts exist */}
@@ -164,9 +217,7 @@ export function Dashboard({ config, userId }: DashboardProps) {
 
       {/* Loading state */}
       {loading && !snapshot && (
-        <div className="flex items-center justify-center py-20">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
-        </div>
+        <SkeletonGrid columns={cols} count={activeConfig.metrics.filter(m => m.visible).length || 6} />
       )}
 
       {/* Standard metrics grid */}
@@ -178,8 +229,16 @@ export function Dashboard({ config, userId }: DashboardProps) {
               metric.chartType === 'line' ||
               metric.chartType === 'bar' ||
               metric.chartType === 'area';
+            const animClass = animatedIds.has(metric.id) ? 'animate-tile-enter' : '';
 
-            return isChart ? (
+            const tile = metric.chartType === 'gauge' ? (
+              <GaugeTile
+                key={metric.id}
+                metric={metric}
+                value={val}
+                userId={userId}
+              />
+            ) : isChart ? (
               <ChartTile
                 key={metric.id}
                 metric={metric}
@@ -194,6 +253,12 @@ export function Dashboard({ config, userId }: DashboardProps) {
                 userId={userId}
               />
             );
+
+            return animClass ? (
+              <div key={metric.id} className={animClass}>{tile}</div>
+            ) : (
+              <div key={metric.id}>{tile}</div>
+            );
           })}
         </div>
       )}
@@ -205,12 +270,18 @@ export function Dashboard({ config, userId }: DashboardProps) {
             Breakdowns
           </h3>
           <div className={gridClass}>
-            {breakdownMetrics.map((metric) => (
-              <BreakdownChart
-                key={`${metric.id}-${metric.breakdownBy}`}
-                metric={applyGlobalFilters(metric)}
-              />
-            ))}
+            {breakdownMetrics.map((metric) => {
+              const filtered = applyGlobalFilters(metric);
+              if (metric.chartType === 'heatmap') {
+                return <HeatMapChart key={`${metric.id}-heatmap`} metric={filtered} />;
+              }
+              return (
+                <BreakdownChart
+                  key={`${metric.id}-${metric.breakdownBy}`}
+                  metric={filtered}
+                />
+              );
+            })}
           </div>
         </div>
       )}

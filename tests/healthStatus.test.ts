@@ -22,7 +22,7 @@ function getHealthStatus(
 }
 
 describe('Health Status Evaluation', () => {
-  describe('lower-is-better metrics (e.g., wait time)', () => {
+  describe('lower-is-better metrics (e.g., cancelled order rate)', () => {
     const thresholds: ThresholdConfig = {
       green: { max: 3 },
       yellow: { max: 5 },
@@ -54,7 +54,7 @@ describe('Health Status Evaluation', () => {
     });
   });
 
-  describe('higher-is-better metrics (e.g., SLA compliance)', () => {
+  describe('higher-is-better metrics (e.g., fulfillment rate)', () => {
     const thresholds: ThresholdConfig = {
       green: { max: 95 },
       yellow: { max: 80 },
@@ -85,8 +85,8 @@ describe('Health Status Evaluation', () => {
   });
 
   describe('edge cases', () => {
-    it('handles staffing ratio thresholds correctly', () => {
-      // staffing_ratio: greenMax 1.5, yellowMax 1.0, higher-is-better
+    it('handles avg_price thresholds correctly', () => {
+      // avg_price: greenMax 1.5, yellowMax 1.0, higher-is-better
       const thresholds: ThresholdConfig = {
         green: { max: 1.5 },
         yellow: { max: 1.0 },

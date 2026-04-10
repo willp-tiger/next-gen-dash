@@ -36,11 +36,11 @@ describe('Claude Service - JSON Extraction', () => {
   });
 
   it('handles complex nested JSON in code fences', () => {
-    const input = '```json\n{\n  "summary": "test",\n  "metrics": [\n    {"id": "avg_wait_time", "label": "Wait Time"}\n  ]\n}\n```';
+    const input = '```json\n{\n  "summary": "test",\n  "metrics": [\n    {"id": "total_revenue", "label": "Total Revenue"}\n  ]\n}\n```';
     const parsed = JSON.parse(extractJSON(input));
     expect(parsed.summary).toBe('test');
     expect(parsed.metrics).toHaveLength(1);
-    expect(parsed.metrics[0].id).toBe('avg_wait_time');
+    expect(parsed.metrics[0].id).toBe('total_revenue');
   });
 });
 
@@ -56,13 +56,13 @@ describe('Claude Service - Response Validation', () => {
 
   it('validates a well-formed response', () => {
     const response = JSON.stringify({
-      summary: 'Dashboard focused on wait times',
-      priorities: [{ label: 'Wait Time', weight: 0.9, reasoning: 'User mentioned it' }],
+      summary: 'Dashboard focused on revenue',
+      priorities: [{ label: 'Revenue', weight: 0.9, reasoning: 'User mentioned it' }],
       metrics: [
         {
-          id: 'avg_wait_time', label: 'Avg Wait Time', unit: 'minutes',
+          id: 'total_revenue', label: 'Total Revenue', unit: 'dollars',
           chartType: 'line', size: 'lg',
-          thresholds: { green: { max: 3 }, yellow: { max: 5 }, direction: 'lower-is-better' },
+          thresholds: { green: { max: 300000 }, yellow: { max: 200000 }, direction: 'higher-is-better' },
           position: 0, visible: true,
         },
       ],
@@ -73,7 +73,7 @@ describe('Claude Service - Response Validation', () => {
 
   it('rejects response with missing summary', () => {
     const response = JSON.stringify({
-      metrics: [{ id: 'avg_wait_time' }],
+      metrics: [{ id: 'total_revenue' }],
     });
     expect(validateInterpretResult(response)).toBe(false);
   });

@@ -50,7 +50,7 @@ describe('Build & Project Health', () => {
     const requiredFiles = [
       'shared/types.ts',
       'server/src/index.ts',
-      'server/src/services/mockData.ts',
+      'server/src/services/salesData.ts',
       'server/src/services/claude.ts',
       'server/src/services/configStore.ts',
       'server/src/prompts/interpret.ts',

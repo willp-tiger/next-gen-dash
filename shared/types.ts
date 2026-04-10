@@ -25,12 +25,13 @@ export interface MetricConfig {
   id: string;
   label: string;
   unit: string;
-  chartType: 'number' | 'line' | 'bar' | 'area' | 'gauge' | 'breakdown';
+  chartType: 'number' | 'line' | 'bar' | 'area' | 'gauge' | 'breakdown' | 'heatmap';
   size: 'sm' | 'md' | 'lg';
   thresholds: ThresholdConfig;
   position: number;
   visible: boolean;
-  breakdownBy?: 'make' | 'model' | 'date';
+  reasoning?: string;
+  breakdownBy?: 'product_line' | 'country' | 'territory' | 'deal_size' | 'quarter';
   filterBy?: FilterState;
 }
 
@@ -58,7 +59,7 @@ export interface MetricValue {
   delta: number;
 }
 
-// === Interaction Tracking (Phase 3) ===
+// === Interaction Tracking ===
 
 export interface InteractionEvent {
   userId: string;
@@ -78,13 +79,13 @@ export interface RefinementSuggestion {
   status: 'pending' | 'accepted' | 'dismissed';
 }
 
-// === Categorical / Filter Types ===
+// === Filter Types ===
 
 export interface FilterState {
-  make?: string;
-  model?: string;
-  dateFrom?: string;
-  dateTo?: string;
+  product_line?: string;
+  country?: string;
+  territory?: string;
+  deal_size?: string;
 }
 
 export interface CategoryBreakdown {
@@ -97,23 +98,20 @@ export interface CategoricalSnapshot {
   filters: FilterState;
   metrics: Record<string, MetricValue>;
   breakdowns: {
-    byMake: CategoryBreakdown;
-    byModel: CategoryBreakdown;
-    byDate: CategoryBreakdown;
+    byProductLine: CategoryBreakdown;
+    byCountry: CategoryBreakdown;
+    byTerritory: CategoryBreakdown;
   };
 }
 
-export const VEHICLE_MAKES = ['Toyota', 'Honda', 'Ford', 'Chevrolet', 'BMW', 'Tesla'] as const;
-export type VehicleMake = (typeof VEHICLE_MAKES)[number];
+export const PRODUCT_LINES = ['Classic Cars', 'Motorcycles', 'Planes', 'Ships', 'Trains', 'Trucks and Buses', 'Vintage Cars'] as const;
+export type ProductLine = (typeof PRODUCT_LINES)[number];
 
-export const VEHICLE_MODELS: Record<VehicleMake, string[]> = {
-  Toyota: ['Camry', 'Corolla', 'RAV4', 'Highlander'],
-  Honda: ['Civic', 'Accord', 'CR-V', 'Pilot'],
-  Ford: ['F-150', 'Mustang', 'Explorer', 'Escape'],
-  Chevrolet: ['Silverado', 'Malibu', 'Equinox', 'Tahoe'],
-  BMW: ['3 Series', '5 Series', 'X3', 'X5'],
-  Tesla: ['Model 3', 'Model Y', 'Model S', 'Model X'],
-};
+export const TERRITORIES = ['NA', 'EMEA', 'APAC', 'Japan'] as const;
+export type Territory = (typeof TERRITORIES)[number];
+
+export const DEAL_SIZES = ['Small', 'Medium', 'Large'] as const;
+export type DealSize = (typeof DEAL_SIZES)[number];
 
 // === API Request/Response Types ===
 
@@ -131,18 +129,18 @@ export type HealthStatus = 'healthy' | 'warning' | 'critical';
 // === Available Metrics Registry ===
 
 export const AVAILABLE_METRICS = [
-  'avg_wait_time',
-  'max_wait_time',
-  'queue_depth',
-  'staffing_ratio',
-  'sla_compliance',
-  'escalation_rate',
-  'first_contact_resolution',
-  'cost_per_ticket',
-  'csat_score',
-  'agent_utilization',
-  'abandon_rate',
-  'avg_handle_time',
+  'total_revenue',
+  'avg_order_value',
+  'total_orders',
+  'units_sold',
+  'avg_price',
+  'fulfillment_rate',
+  'cancelled_order_rate',
+  'avg_deal_size_value',
+  'revenue_per_customer',
+  'order_frequency',
+  'product_line_count',
+  'territory_revenue_share',
 ] as const;
 
 export type MetricId = (typeof AVAILABLE_METRICS)[number];

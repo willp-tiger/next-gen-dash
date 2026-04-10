@@ -21,5 +21,8 @@
     "jsdom": "^29.0.2",
     "typescript": "^5.7.0",
     "vitest": "^4.1.4"
+  },
+  "dependencies": {
+    "pg": "^8.20.0"
   }
 }

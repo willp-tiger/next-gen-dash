@@ -12,13 +12,13 @@ describe('Shared Types', () => {
     });
 
     it('contains expected core metrics', () => {
-      expect(AVAILABLE_METRICS).toContain('avg_wait_time');
-      expect(AVAILABLE_METRICS).toContain('sla_compliance');
-      expect(AVAILABLE_METRICS).toContain('queue_depth');
-      expect(AVAILABLE_METRICS).toContain('staffing_ratio');
-      expect(AVAILABLE_METRICS).toContain('escalation_rate');
-      expect(AVAILABLE_METRICS).toContain('cost_per_ticket');
-      expect(AVAILABLE_METRICS).toContain('csat_score');
+      expect(AVAILABLE_METRICS).toContain('total_revenue');
+      expect(AVAILABLE_METRICS).toContain('avg_order_value');
+      expect(AVAILABLE_METRICS).toContain('total_orders');
+      expect(AVAILABLE_METRICS).toContain('units_sold');
+      expect(AVAILABLE_METRICS).toContain('fulfillment_rate');
+      expect(AVAILABLE_METRICS).toContain('cancelled_order_rate');
+      expect(AVAILABLE_METRICS).toContain('avg_deal_size_value');
     });
 
     it('all IDs are snake_case strings', () => {

@@ -13,6 +13,7 @@ import {
 import type { MetricConfig, MetricValue } from 'shared/types';
 import { HealthBadge, getHealthStatus } from './HealthBadge';
 import { logInteraction } from '../../api/client';
+import { MetricTooltip } from './MetricTooltip';
 
 interface ChartTileProps {
   metric: MetricConfig;
@@ -134,6 +135,7 @@ export function ChartTile({ metric, value, userId, onClick }: ChartTileProps) {
   };
 
   return (
+    <MetricTooltip metric={metric}>
     <div
       onClick={handleClick}
       className={`cursor-pointer rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-200 transition hover:shadow-md ${
@@ -165,5 +167,6 @@ export function ChartTile({ metric, value, userId, onClick }: ChartTileProps) {
         </ResponsiveContainer>
       </div>
     </div>
+    </MetricTooltip>
   );
 }

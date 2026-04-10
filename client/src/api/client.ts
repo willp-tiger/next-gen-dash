@@ -49,13 +49,18 @@ export function updateDashboardConfig(userId: string, config: DashboardConfig) {
 
 export function getMetrics(metricIds?: string[]) {
   const params = metricIds?.length
-    ? `?ids=${metricIds.join(',')}`
+    ? `?metricIds=${metricIds.join(',')}`
     : '';
   return fetchJson<MetricsSnapshot>(`/metrics${params}`);
 }
 
-export function getCanonicalView() {
-  return fetchJson<DashboardConfig>('/metrics/canonical');
+export async function getCanonicalView(): Promise<DashboardConfig> {
+  const data = await fetchJson<{ config: DashboardConfig; snapshot: MetricsSnapshot }>('/metrics/canonical');
+  return data.config;
+}
+
+export function getPersonaConfigs() {
+  return fetchJson<Record<string, DashboardConfig>>('/metrics/personas');
 }
 
 export function logInteraction(event: InteractionEvent) {
@@ -65,30 +70,42 @@ export function logInteraction(event: InteractionEvent) {
   });
 }
 
-export function getRefinementSuggestions(userId: string) {
-  return fetchJson<RefinementSuggestion[]>(`/refinement/suggestions/${userId}`);
+export async function getRefinementSuggestions(userId: string): Promise<RefinementSuggestion[]> {
+  const data = await fetchJson<{ suggestions: RefinementSuggestion[]; totalInteractions: number }>(
+    `/refinement/suggestions/${userId}`
+  );
+  return data.suggestions;
 }
 
-export function updateSuggestion(id: string, status: 'accepted' | 'dismissed') {
+export function updateSuggestion(
+  id: string,
+  status: 'accepted' | 'dismissed',
+  extra?: { userId: string; type: string; metricId: string }
+) {
   return fetchJson<RefinementSuggestion>(`/refinement/suggestions/${id}`, {
     method: 'PUT',
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, ...extra }),
   });
 }
 
 export function getCategoricalMetrics(metricIds?: string[], filters?: FilterState) {
   const params = new URLSearchParams();
   if (metricIds?.length) params.set('metricIds', metricIds.join(','));
-  if (filters?.make) params.set('make', filters.make);
-  if (filters?.model) params.set('model', filters.model);
-  if (filters?.dateFrom) params.set('dateFrom', filters.dateFrom);
-  if (filters?.dateTo) params.set('dateTo', filters.dateTo);
+  if (filters?.product_line) params.set('product_line', filters.product_line);
+  if (filters?.country) params.set('country', filters.country);
+  if (filters?.territory) params.set('territory', filters.territory);
+  if (filters?.deal_size) params.set('deal_size', filters.deal_size);
   const qs = params.toString();
   return fetchJson<CategoricalSnapshot>(`/metrics/categorical${qs ? '?' + qs : ''}`);
 }
 
 export function getAvailableFilters() {
-  return fetchJson<{ makes: string[]; models: Record<string, string[]>; dateRange: { min: string; max: string } }>('/metrics/filters');
+  return fetchJson<{
+    productLines: string[];
+    countries: string[];
+    territories: string[];
+    dealSizes: string[];
+  }>('/metrics/filters');
 }
 
 export function dashboardChat(userId: string, message: string) {

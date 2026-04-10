@@ -54,33 +54,33 @@ export async function interpretPrompt(userInput: string): Promise<InterpretResul
     console.error('Raw response:', raw);
 
     return {
-      summary: 'Default dashboard based on your request.',
+      summary: 'Default sales dashboard based on your request.',
       priorities: [
-        { label: 'General Monitoring', weight: 1, reasoning: 'Fallback configuration' },
+        { label: 'Sales Overview', weight: 1, reasoning: 'Fallback configuration' },
       ],
       metrics: [
         {
-          id: 'avg_wait_time', label: 'Avg Wait Time', unit: 'minutes',
+          id: 'total_revenue', label: 'Total Revenue', unit: 'dollars',
           chartType: 'line', size: 'lg',
-          thresholds: { green: { max: 3 }, yellow: { max: 5 }, direction: 'lower-is-better' },
+          thresholds: { green: { max: 300000 }, yellow: { max: 200000 }, direction: 'higher-is-better' },
           position: 0, visible: true,
         },
         {
-          id: 'queue_depth', label: 'Queue Depth', unit: 'count',
+          id: 'total_orders', label: 'Total Orders', unit: 'count',
           chartType: 'bar', size: 'md',
-          thresholds: { green: { max: 10 }, yellow: { max: 20 }, direction: 'lower-is-better' },
+          thresholds: { green: { max: 350 }, yellow: { max: 250 }, direction: 'higher-is-better' },
           position: 1, visible: true,
         },
         {
-          id: 'sla_compliance', label: 'SLA Compliance', unit: 'percent',
+          id: 'fulfillment_rate', label: 'Fulfillment Rate', unit: 'percent',
           chartType: 'gauge', size: 'md',
-          thresholds: { green: { max: 95 }, yellow: { max: 80 }, direction: 'higher-is-better' },
+          thresholds: { green: { max: 95 }, yellow: { max: 85 }, direction: 'higher-is-better' },
           position: 2, visible: true,
         },
         {
-          id: 'csat_score', label: 'CSAT Score', unit: 'score',
-          chartType: 'gauge', size: 'md',
-          thresholds: { green: { max: 4.5 }, yellow: { max: 3.5 }, direction: 'higher-is-better' },
+          id: 'avg_order_value', label: 'Avg Order Value', unit: 'dollars',
+          chartType: 'line', size: 'md',
+          thresholds: { green: { max: 4000 }, yellow: { max: 3000 }, direction: 'higher-is-better' },
           position: 3, visible: true,
         },
       ],

@@ -18,6 +18,21 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
   const [isTyping, setIsTyping] = useState(false);
   const [isBuilding, setIsBuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showExamples, setShowExamples] = useState(true);
+
+  const EXAMPLE_PROMPTS = [
+    "I'm a sales rep -- I care about revenue and deal sizes",
+    "I'm a sales director focused on fulfillment rates and territory performance",
+    "I'm an executive tracking revenue growth and order trends",
+  ];
+
+  const PROGRESS_STEPS = [
+    { label: 'Understanding your role', threshold: 0 },
+    { label: 'Gathering priorities', threshold: 1 },
+    { label: 'Refining details', threshold: 2 },
+    { label: 'Almost ready', threshold: 3 },
+  ];
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const initialized = useRef(false);
@@ -57,6 +72,7 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
 
     setInput('');
     setError(null);
+    setShowExamples(false);
     setMessages((prev) => [...prev, { role: 'user', text: trimmed }]);
     setIsTyping(true);
 
@@ -90,6 +106,42 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
     }
   };
 
+  const handleExampleClick = (text: string) => {
+    setInput(text);
+    // Auto-send after a brief moment so user sees what was selected
+    setTimeout(() => {
+      setInput('');
+      setShowExamples(false);
+      setMessages((prev) => [...prev, { role: 'user', text }]);
+      setIsTyping(true);
+      chatMessage(userId, text).then((res) => {
+        if (res.reply) {
+          setMessages((prev) => [...prev, { role: 'assistant', text: res.reply }]);
+        }
+        setIsTyping(false);
+        if (res.isReady && res.transcript) {
+          setIsBuilding(true);
+          setMessages((prev) => [
+            ...prev,
+            { role: 'assistant', text: "Great, I have everything I need. Let me build your dashboard..." },
+          ]);
+          interpretPrompt(userId, res.transcript).then((response) => {
+            onComplete(response.config);
+          }).catch(() => {
+            setIsBuilding(false);
+            setError('Something went wrong building the dashboard.');
+          });
+        }
+      }).catch(() => {
+        setIsTyping(false);
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', text: 'Sorry, something went wrong. Could you try that again?' },
+        ]);
+      });
+    }, 100);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -107,6 +159,29 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
         <p className="mt-1 text-sm text-gray-500">
           Tell me what you need to monitor and I&apos;ll personalize your view
         </p>
+
+        {/* Progress indicator */}
+        {(() => {
+          const userMsgCount = messages.filter(m => m.role === 'user').length;
+          const stepIndex = Math.min(userMsgCount, PROGRESS_STEPS.length - 1);
+          const progress = isBuilding ? 100 : Math.min(((userMsgCount + 1) / 5) * 100, 95);
+          const stepLabel = isBuilding ? 'Building dashboard...' : PROGRESS_STEPS[stepIndex].label;
+
+          return (
+            <div className="mt-3">
+              <div className="flex items-center justify-between text-xs text-gray-400">
+                <span>{stepLabel}</span>
+                <span>{Math.round(progress)}%</span>
+              </div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-100">
+                <div
+                  className="h-full rounded-full bg-indigo-500 transition-all duration-700 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Messages area */}
@@ -139,6 +214,23 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
                 <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '150ms' }} />
                 <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '300ms' }} />
               </span>
+            </div>
+          </div>
+        )}
+
+        {showExamples && !isTyping && messages.length > 0 && (
+          <div className="space-y-2 px-2">
+            <p className="text-xs font-medium text-gray-400">Try an example:</p>
+            <div className="flex flex-col gap-2">
+              {EXAMPLE_PROMPTS.map((prompt, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleExampleClick(prompt)}
+                  className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-left text-sm text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-100"
+                >
+                  {prompt}
+                </button>
+              ))}
             </div>
           </div>
         )}

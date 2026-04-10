@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import type { MetricConfig, FilterState, CategoryBreakdown } from 'shared/types';
+import type { MetricConfig, CategoryBreakdown } from 'shared/types';
 import { getCategoricalMetrics } from '../../api/client';
 
 interface BreakdownChartProps {
@@ -19,12 +19,12 @@ export function BreakdownChart({ metric, onClick }: BreakdownChartProps) {
         [metric.id],
         metric.filterBy || {}
       );
-      const dim = metric.breakdownBy || 'make';
-      const bd = dim === 'make'
-        ? data.breakdowns.byMake
-        : dim === 'model'
-        ? data.breakdowns.byModel
-        : data.breakdowns.byDate;
+      const dim = metric.breakdownBy || 'product_line';
+      const bd = dim === 'product_line'
+        ? data.breakdowns.byProductLine
+        : dim === 'country'
+        ? data.breakdowns.byCountry
+        : data.breakdowns.byTerritory;
       setBreakdown(bd);
     } catch {
       // ignore
@@ -37,8 +37,15 @@ export function BreakdownChart({ metric, onClick }: BreakdownChartProps) {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  const dimLabel = metric.breakdownBy === 'date' ? 'Date' : metric.breakdownBy === 'model' ? 'Model' : 'Make';
-  const filterLabel = metric.filterBy?.make ? ` (${metric.filterBy.make})` : '';
+  const dimLabels: Record<string, string> = {
+    product_line: 'Product Line',
+    country: 'Country',
+    territory: 'Territory',
+    deal_size: 'Deal Size',
+    quarter: 'Quarter',
+  };
+  const dimLabel = dimLabels[metric.breakdownBy || 'product_line'] || 'Product Line';
+  const filterLabel = metric.filterBy?.product_line ? ` (${metric.filterBy.product_line})` : '';
   const isLarge = metric.size === 'lg';
 
   return (
@@ -69,9 +76,9 @@ export function BreakdownChart({ metric, onClick }: BreakdownChartProps) {
               axisLine={false}
               tickLine={false}
               interval={0}
-              angle={metric.breakdownBy === 'date' ? -35 : 0}
-              textAnchor={metric.breakdownBy === 'date' ? 'end' : 'middle'}
-              height={metric.breakdownBy === 'date' ? 50 : 30}
+              angle={breakdown.values.length > 5 ? -35 : 0}
+              textAnchor={breakdown.values.length > 5 ? 'end' : 'middle'}
+              height={breakdown.values.length > 5 ? 50 : 30}
             />
             <YAxis hide />
             <Tooltip

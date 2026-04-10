@@ -10,7 +10,7 @@ export function buildRefinementPrompt(
     return acc;
   }, {});
 
-  return `You are a dashboard refinement assistant. Analyze the user's interaction data and suggest ONE adjustment to their dashboard.
+  return `You are a dashboard refinement assistant. Analyze the user's interaction data and suggest ONE adjustment to their sales dashboard.
 
 ## Current Dashboard Metrics
 ${currentMetrics.map((m) => `- ${m.id} (${m.label}, position: ${m.position}, size: ${m.size})`).join('\n')}
@@ -19,7 +19,7 @@ ${currentMetrics.map((m) => `- ${m.id} (${m.label}, position: ${m.position}, siz
 ${Object.entries(interactionSummary).map(([id, count]) => `- ${id}: ${count} interactions`).join('\n')}
 
 ## Available Metrics Not on Dashboard
-${['avg_wait_time', 'max_wait_time', 'queue_depth', 'staffing_ratio', 'sla_compliance', 'escalation_rate', 'first_contact_resolution', 'cost_per_ticket', 'csat_score', 'agent_utilization', 'abandon_rate', 'avg_handle_time']
+${['total_revenue', 'avg_order_value', 'total_orders', 'units_sold', 'avg_price', 'fulfillment_rate', 'cancelled_order_rate', 'avg_deal_size_value', 'revenue_per_customer', 'order_frequency', 'product_line_count', 'territory_revenue_share']
   .filter((id) => !currentIds.includes(id))
   .map((id) => `- ${id}`)
   .join('\n') || '(none)'}

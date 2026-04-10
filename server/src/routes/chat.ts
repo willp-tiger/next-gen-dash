@@ -70,7 +70,7 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // Reset conversation
-router.delete('/:userId', (req: Request, res: Response) => {
+router.delete('/:userId', (req: Request<{ userId: string }>, res: Response) => {
   conversations.delete(req.params.userId);
   res.json({ ok: true });
 });
