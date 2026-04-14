@@ -2,6 +2,7 @@ import type { MetricConfig, MetricValue } from 'shared/types';
 import { HealthBadge, getHealthStatus } from './HealthBadge';
 import { logInteraction } from '../../api/client';
 import { MetricTooltip } from './MetricTooltip';
+import { formatValue, formatDelta } from '../../lib/format';
 
 interface GaugeTileProps {
   metric: MetricConfig;
@@ -14,7 +15,6 @@ export function GaugeTile({ metric, value, userId, onClick }: GaugeTileProps) {
   const status = getHealthStatus(value.current, metric.thresholds);
   const deltaPositive = value.delta >= 0;
   const deltaColor = deltaPositive ? 'text-emerald-600' : 'text-red-600';
-  const deltaArrow = deltaPositive ? '\u2191' : '\u2193';
 
   // Calculate gauge angle (semicircle: 0 to 180 degrees)
   const { green, yellow, direction } = metric.thresholds;
@@ -96,22 +96,13 @@ export function GaugeTile({ metric, value, userId, onClick }: GaugeTileProps) {
           {/* Center value */}
           <text
             x={cx}
-            y={cy - 6}
+            y={cy + 2}
             textAnchor="middle"
             className="fill-gray-900 text-lg font-bold"
             fontSize="18"
             fontWeight="700"
           >
-            {value.current % 1 === 0 ? value.current : value.current.toFixed(1)}
-          </text>
-          <text
-            x={cx}
-            y={cy + 8}
-            textAnchor="middle"
-            className="fill-gray-400"
-            fontSize="10"
-          >
-            {metric.unit}
+            {formatValue(value.current, metric.unit)}
           </text>
         </svg>
       </div>
@@ -119,7 +110,7 @@ export function GaugeTile({ metric, value, userId, onClick }: GaugeTileProps) {
       {/* Delta */}
       <div className="mt-1 text-center">
         <span className={`text-sm font-medium ${deltaColor}`}>
-          {deltaArrow} {Math.abs(value.delta).toFixed(1)}%
+          {formatDelta(value.delta)}
         </span>
       </div>
     </div>

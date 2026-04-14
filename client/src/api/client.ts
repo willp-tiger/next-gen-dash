@@ -40,11 +40,12 @@ export function getDashboardConfig(userId: string) {
   return fetchJson<DashboardConfig>(`/dashboard/${userId}`);
 }
 
-export function updateDashboardConfig(userId: string, config: DashboardConfig) {
-  return fetchJson<DashboardConfig>(`/dashboard/${userId}`, {
+export async function updateDashboardConfig(userId: string, config: DashboardConfig) {
+  const data = await fetchJson<{ config: DashboardConfig }>(`/dashboard/${userId}`, {
     method: 'PUT',
     body: JSON.stringify(config),
   });
+  return data.config;
 }
 
 export function getMetrics(metricIds?: string[]) {

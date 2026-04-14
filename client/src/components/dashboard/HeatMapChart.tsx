@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { MetricConfig, CategoryBreakdown } from 'shared/types';
 import { getCategoricalMetrics } from '../../api/client';
+import { formatAxis } from '../../lib/format';
 
 interface HeatMapChartProps {
   metric: MetricConfig;
@@ -117,7 +118,7 @@ export function HeatMapChart({ metric, onClick }: HeatMapChartProps) {
                         color: getTextColor(val, minVal, maxVal, dir),
                       }}
                     >
-                      {val}
+                      {formatAxis(val, metric.unit)}
                     </div>
                   </td>
                 ))}

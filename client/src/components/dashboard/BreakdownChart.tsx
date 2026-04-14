@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
 import type { MetricConfig, CategoryBreakdown } from 'shared/types';
 import { getCategoricalMetrics } from '../../api/client';
+import { formatValue, formatAxis } from '../../lib/format';
 
 interface BreakdownChartProps {
   metric: MetricConfig;
@@ -82,13 +83,20 @@ export function BreakdownChart({ metric, onClick }: BreakdownChartProps) {
             />
             <YAxis hide />
             <Tooltip
+              cursor={{ fill: 'rgba(99, 102, 241, 0.06)' }}
               contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
-              formatter={(value: number) => [value.toFixed(1), metric.unit]}
+              formatter={(value: number) => [formatValue(value, metric.unit), metric.label]}
             />
             <Bar dataKey="value" radius={[4, 4, 0, 0]}>
               {breakdown.values.map((_, i) => (
                 <Cell key={i} fill={COLORS[i % COLORS.length]} />
               ))}
+              <LabelList
+                dataKey="value"
+                position="top"
+                formatter={(v: number) => formatAxis(v, metric.unit)}
+                style={{ fontSize: 10, fill: '#6b7280', fontWeight: 500 }}
+              />
             </Bar>
           </BarChart>
         </ResponsiveContainer>

@@ -14,6 +14,7 @@ import type { MetricConfig, MetricValue } from 'shared/types';
 import { HealthBadge, getHealthStatus } from './HealthBadge';
 import { logInteraction } from '../../api/client';
 import { MetricTooltip } from './MetricTooltip';
+import { formatValue } from '../../lib/format';
 
 interface ChartTileProps {
   metric: MetricConfig;
@@ -65,7 +66,7 @@ export function ChartTile({ metric, value, userId, onClick }: ChartTileProps) {
               }}
               labelFormatter={() => ''}
               formatter={(val: number) => [
-                `${val}${metric.unit ? ' ' + metric.unit : ''}`,
+                formatValue(val, metric.unit),
                 metric.label,
               ]}
             />
@@ -91,7 +92,7 @@ export function ChartTile({ metric, value, userId, onClick }: ChartTileProps) {
               }}
               labelFormatter={() => ''}
               formatter={(val: number) => [
-                `${val}${metric.unit ? ' ' + metric.unit : ''}`,
+                formatValue(val, metric.unit),
                 metric.label,
               ]}
             />
@@ -118,7 +119,7 @@ export function ChartTile({ metric, value, userId, onClick }: ChartTileProps) {
               }}
               labelFormatter={() => ''}
               formatter={(val: number) => [
-                `${val}${metric.unit ? ' ' + metric.unit : ''}`,
+                formatValue(val, metric.unit),
                 metric.label,
               ]}
             />
@@ -151,13 +152,10 @@ export function ChartTile({ metric, value, userId, onClick }: ChartTileProps) {
       </div>
 
       {/* Current value */}
-      <div className="mt-2 flex items-baseline gap-2">
+      <div className="mt-2">
         <span className="text-2xl font-bold text-gray-900">
-          {value.current % 1 === 0
-            ? value.current
-            : value.current.toFixed(1)}
+          {formatValue(value.current, metric.unit)}
         </span>
-        <span className="text-sm text-gray-400">{metric.unit}</span>
       </div>
 
       {/* Chart */}

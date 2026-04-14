@@ -3,6 +3,7 @@ import type { MetricConfig, MetricValue } from 'shared/types';
 import { HealthBadge, getHealthStatus } from './HealthBadge';
 import { logInteraction } from '../../api/client';
 import { MetricTooltip } from './MetricTooltip';
+import { formatValue, formatDelta } from '../../lib/format';
 
 interface MetricTileProps {
   metric: MetricConfig;
@@ -15,7 +16,6 @@ export function MetricTile({ metric, value, userId, onClick }: MetricTileProps) 
   const status = getHealthStatus(value.current, metric.thresholds);
   const deltaPositive = value.delta >= 0;
   const deltaColor = deltaPositive ? 'text-emerald-600' : 'text-red-600';
-  const deltaArrow = deltaPositive ? '\u2191' : '\u2193';
 
   const sparkData = value.trend.map((v, i) => ({ i, v }));
 
@@ -53,21 +53,16 @@ export function MetricTile({ metric, value, userId, onClick }: MetricTileProps) 
       </div>
 
       {/* Value */}
-      <div className="mt-3 flex items-baseline gap-2">
+      <div className="mt-3">
         <span className="text-3xl font-bold text-gray-900">
-          {typeof value.current === 'number'
-            ? value.current % 1 === 0
-              ? value.current
-              : value.current.toFixed(1)
-            : value.current}
+          {formatValue(value.current, metric.unit)}
         </span>
-        <span className="text-sm text-gray-400">{metric.unit}</span>
       </div>
 
       {/* Delta */}
       <div className="mt-1">
         <span className={`text-sm font-medium ${deltaColor}`}>
-          {deltaArrow} {Math.abs(value.delta).toFixed(1)}%
+          {formatDelta(value.delta)}
         </span>
       </div>
 

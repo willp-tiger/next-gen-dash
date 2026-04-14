@@ -1,5 +1,57 @@
 # Session History
 
+## Session 2026-04-14: Dashboard-chat 404 fix and number formatting polish
+
+**Completed Tasks:**
+- Diagnosed "Sorry, something went wrong" error from the Dashboard Assistant chat
+  on the Railway-hosted app. Root cause: `handlePersonaPick` in
+  `client/src/components/onboarding/OnboardingFlow.tsx` routed users into the
+  dashboard using a pre-built persona config without ever saving a config to
+  the server under the session userId, so `/api/dashboard-chat/:userId`
+  returned 404.
+- Fix, client side: `handlePersonaPick` now adopts the persona config under the
+  current `user-<timestamp>` id and PUTs it to the server before calling
+  `onComplete`. `updateDashboardConfig` now unwraps the `{config}` envelope the
+  server actually returns.
+- Fix, server side: `PUT /api/dashboard/:userId` now upserts (previously
+  required an existing config or returned 404). This is the correct REST
+  semantic for a config store and unblocks persona adoption.
+- Number formatting pass for client-presentable output:
+  - New `client/src/lib/format.ts` with `formatValue`, `formatNumber`,
+    `formatAxis`, `formatDelta`. Rules: `dollars` → `$1,234` or `$1.23M`
+    (compact mode), `percent` → `87.3%`, `count` → commas + K/M/B above 10K.
+  - MetricTile, ChartTile, GaugeTile: value + tooltip use `formatValue`; delta
+    uses `formatDelta`. Removed the literal "dollars" / "percent" unit-word
+    suffixes that were displayed next to values.
+  - BreakdownChart: fixed broken tooltip formatter (`value.toFixed(1) dollars`
+    was nonsensical), added `<LabelList>` above bars so readers see the
+    formatted value without hovering, cursor highlight softened.
+  - HeatMapChart: cell values render through `formatAxis` so dollar cells show
+    `$123K` not `123.4`.
+- Verified end-to-end on Railway: new userId → PUT persona config → POST
+  `/api/dashboard-chat/:userId` "add a gauge for fulfillment rate" → 200 with
+  action:"add" and updated config in body.
+
+**Technical Decisions:**
+- PUT is upsert rather than introducing a separate POST `/adopt` endpoint —
+  the config store is idempotent by userId and the client already had
+  `updateDashboardConfig`. One round trip, no new API surface.
+- Formatter lives in `client/src/lib` (new directory) since it's display-only
+  logic with no server counterpart.
+- Gauge tile now renders the currency symbol inline (`$1.23M`) instead of a
+  separate unit subtitle, since the symbol reads fine at gauge text size.
+
+**Issues Resolved:**
+- Dashboard Assistant chat returned "Sorry, something went wrong" on the
+  deployed app whenever a user picked a pre-built persona (the most common
+  onboarding path). Persona users can now chat-edit their dashboard.
+- Metric values displayed as raw floats with unit words appended (e.g.
+  `1234567 dollars`) — now `$1.23M`.
+
+**Deployment:**
+- Railway deploys: `e6b3de43` (persona fix, bundle `index-B4uA2x_o.js`),
+  `5a7020fc` (formatting pass, bundle `index-Bx5MRBxk.js`).
+
 ## Session 2026-04-09: Project Setup and Initial Build
 
 **Completed Tasks:**

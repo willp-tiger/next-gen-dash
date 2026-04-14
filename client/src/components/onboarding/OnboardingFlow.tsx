@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import type { DashboardConfig } from 'shared/types';
-import { chatMessage, interpretPrompt, getPersonaConfigs } from '../../api/client';
+import { chatMessage, interpretPrompt, getPersonaConfigs, updateDashboardConfig } from '../../api/client';
 
 interface OnboardingFlowProps {
   userId: string;
@@ -55,13 +55,26 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
     getPersonaConfigs().then(setPersonas).catch(() => {});
   }, []);
 
-  const handlePersonaPick = (key: string) => {
+  const handlePersonaPick = async (key: string) => {
     if (!personas?.[key]) return;
     setLoadingPersona(key);
-    // Small delay so the user sees the selection
-    setTimeout(() => {
-      onComplete(personas[key]);
-    }, 600);
+    // Adopt the persona config under the current user's id so dashboard-chat
+    // and other per-user endpoints can find a config for this session.
+    const now = new Date().toISOString();
+    const adopted: DashboardConfig = {
+      ...personas[key],
+      userId,
+      createdAt: now,
+      updatedAt: now,
+    };
+    try {
+      const saved = await updateDashboardConfig(userId, adopted);
+      onComplete(saved);
+    } catch {
+      // If the save fails, fall back to using the persona config locally.
+      // The chat will still 404 but the dashboard will render.
+      onComplete(adopted);
+    }
   };
 
   const EXAMPLE_PROMPTS = [

@@ -27,7 +27,17 @@
 - [x] Fix server TypeScript build error (chat.ts param typing)
 
 ## Next Session Goals
-- Deploy to Railway with env vars (ANTHROPIC_API_KEY)
-- End-to-end verification on deployed instance
 - Consider chunk splitting to address 500kB bundle warning
 - Update CLAUDE.md phase checklist to reflect completion
+
+## Session 2026-04-14: Dashboard-chat fix & number formatting polish
+- Fixed dashboard-chat 404 after picking a pre-built persona. `handlePersonaPick`
+  now PUTs the persona config to the server under the current session userId
+  before entering the dashboard. Server `PUT /api/dashboard/:userId` upserts
+  instead of 404'ing when no existing config.
+- Client-presentable number formatting everywhere: new `client/src/lib/format.ts`
+  with `formatValue`/`formatAxis`/`formatDelta`. Applied to MetricTile, ChartTile,
+  GaugeTile, BreakdownChart, HeatMapChart. Dollars render as `$1.23M`, percent as
+  `87.3%`, counts with commas/K-M-B abbreviation.
+- Added data labels above BreakdownChart bars, fixed tooltip label/format.
+- Deployed + e2e verified on Railway (bundle `index-Bx5MRBxk.js`).

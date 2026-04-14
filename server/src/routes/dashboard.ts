@@ -20,19 +20,21 @@ router.get('/:userId', (req: Request<{ userId: string }>, res: Response) => {
 router.put('/:userId', (req: Request<{ userId: string }>, res: Response) => {
   const userId = req.params.userId as string;
   const update = req.body as Partial<DashboardConfig>;
-
   const existing = getConfig(userId);
-  if (!existing) {
-    res.status(404).json({ error: 'No dashboard config found for this user' });
-    return;
-  }
+  const now = new Date().toISOString();
 
+  // Upsert: allow creating a config for a new userId (e.g. persona adoption).
   const updated: DashboardConfig = {
-    ...existing,
+    ...(existing ?? {
+      createdAt: now,
+      userPrompt: '',
+      interpretation: { summary: '', priorities: [] },
+      metrics: [],
+    }),
     ...update,
     userId,
-    updatedAt: new Date().toISOString(),
-  };
+    updatedAt: now,
+  } as DashboardConfig;
 
   setConfig(userId, updated);
   res.json({ config: updated });
