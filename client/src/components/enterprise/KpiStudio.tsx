@@ -184,7 +184,7 @@ export function KpiStudio() {
     if (!candidate) return;
     setValidationRunning(true);
     const kpiId = candidate.kpiId;
-    const allResults = MOCK_VALIDATION_RESULTS[kpiId] ?? MOCK_VALIDATION_RESULTS['long_wait_rate']!;
+    const allResults = MOCK_VALIDATION_RESULTS[kpiId] ?? MOCK_VALIDATION_RESULTS['large_deal_rate']!;
 
     // Simulate stages completing one by one
     setValidationResults([]);
