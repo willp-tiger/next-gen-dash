@@ -93,13 +93,14 @@ export function GaugeTile({ metric, value, userId, onClick }: GaugeTileProps) {
               strokeLinecap="round"
             />
           )}
-          {/* Center value */}
+          {/* Center value — placed inside the upper semicircle of the gauge */}
           <text
             x={cx}
-            y={cy + 2}
+            y={40}
             textAnchor="middle"
-            className="fill-gray-900 text-lg font-bold"
-            fontSize="18"
+            dominantBaseline="middle"
+            className="fill-gray-900"
+            fontSize="17"
             fontWeight="700"
           >
             {formatValue(value.current, metric.unit)}
