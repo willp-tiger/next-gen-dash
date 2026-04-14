@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import type { DashboardConfig } from 'shared/types';
-import { dashboardChat, ApiError } from '../../api/client';
+import { dashboardChat, resetDashboardChat, ApiError } from '../../api/client';
 
 interface DashboardChatProps {
   userId: string;
@@ -114,11 +114,23 @@ export function DashboardChat({ userId, onConfigUpdate }: DashboardChatProps) {
               <h3 className="text-sm font-semibold text-white">Dashboard Assistant</h3>
               <p className="text-xs text-indigo-200">Add, edit, or remove metrics</p>
             </div>
-            <button onClick={() => setIsOpen(false)} className="text-indigo-200 hover:text-white">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={async () => {
+                  await resetDashboardChat(userId).catch(() => {});
+                  setMessages([{ role: 'assistant', text: 'Conversation reset. How can I help?' }]);
+                }}
+                className="text-xs text-indigo-200 hover:text-white"
+                title="Reset conversation"
+              >
+                Reset
+              </button>
+              <button onClick={() => setIsOpen(false)} className="text-indigo-200 hover:text-white">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           {/* Messages */}

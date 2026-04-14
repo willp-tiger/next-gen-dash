@@ -141,3 +141,7 @@ export function dashboardChat(userId: string, message: string) {
     }
   );
 }
+
+export function resetDashboardChat(userId: string) {
+  return fetchJson<{ ok: true }>(`/dashboard-chat/${userId}`, { method: 'DELETE' });
+}
