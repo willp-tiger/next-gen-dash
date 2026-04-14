@@ -150,23 +150,82 @@ function SchemaExplorer({ onTableSelect }: { onTableSelect: (t: CatalogTable) =>
   );
 }
 
-function ValidationPanel({ results }: { results: ValidationResult[] }) {
+function ValidationPanel({ results, running }: { results: ValidationResult[]; running: boolean }) {
+  const passed = results.filter(r => r.status === 'pass').length;
+  const warned = results.filter(r => r.status === 'warn').length;
+  const failed = results.filter(r => r.status === 'fail').length;
+  const pending = results.filter(r => r.status === 'pending').length;
+  const totalMs = results.reduce((s, r) => s + (r.durationMs || 0), 0);
+  const complete = results.length > 0 && pending === 0 && !running;
+
   return (
-    <div className="space-y-1.5">
-      {results.map((r, i) => (
-        <div key={i} className="flex items-start gap-2 rounded-lg border border-gray-200 px-3 py-2">
-          <span className={`mt-0.5 h-2.5 w-2.5 flex-shrink-0 rounded-full ${
-            r.status === 'pass' ? 'bg-emerald-400' : r.status === 'warn' ? 'bg-amber-400' : r.status === 'fail' ? 'bg-red-400' : 'bg-gray-300 animate-pulse'
-          }`} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-gray-700">{r.stage}</span>
-              {r.durationMs > 0 && <span className="text-[10px] text-gray-400">{r.durationMs}ms</span>}
-            </div>
-            <p className="text-xs text-gray-500 mt-0.5">{r.message}</p>
-          </div>
+    <div className="flex flex-col h-full">
+      {/* Summary header */}
+      <div className="mb-3 flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {passed > 0 && (
+            <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+              {passed} passed
+            </span>
+          )}
+          {warned > 0 && (
+            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+              {warned} warn
+            </span>
+          )}
+          {failed > 0 && (
+            <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-700">
+              {failed} failed
+            </span>
+          )}
+          {pending > 0 && (
+            <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+              {pending} pending
+            </span>
+          )}
         </div>
-      ))}
+        <div className="text-[11px] text-gray-500 whitespace-nowrap">
+          {running ? 'Running…' : complete ? `${(totalMs / 1000).toFixed(1)}s` : ''}
+        </div>
+      </div>
+
+      {/* Stepper */}
+      <ol className="flex-1 space-y-3 overflow-y-auto pr-1">
+        {results.map((r, i) => {
+          const isLast = i === results.length - 1;
+          return (
+            <li key={i} className="relative pl-9">
+              {!isLast && (
+                <span className={`absolute left-[11px] top-7 bottom-[-12px] w-px ${
+                  r.status === 'pending' ? 'bg-gray-200' : 'bg-gray-300'
+                }`} />
+              )}
+              <span className={`absolute left-0 top-0.5 flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold ring-4 ring-white ${
+                r.status === 'pass' ? 'bg-emerald-100 text-emerald-700' :
+                r.status === 'warn' ? 'bg-amber-100 text-amber-700' :
+                r.status === 'fail' ? 'bg-red-100 text-red-700' :
+                'bg-gray-100 text-gray-400'
+              }`}>
+                {r.status === 'pass' ? '✓' :
+                 r.status === 'warn' ? '!' :
+                 r.status === 'fail' ? '✕' :
+                 <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-pulse" />}
+              </span>
+              <div className="flex items-baseline justify-between gap-2">
+                <span className={`text-sm font-medium ${r.status === 'pending' ? 'text-gray-400' : 'text-gray-800'}`}>
+                  {r.stage}
+                </span>
+                {r.durationMs > 0 && r.status !== 'pending' && (
+                  <span className="text-[11px] text-gray-400 whitespace-nowrap">{r.durationMs}ms</span>
+                )}
+              </div>
+              <p className={`mt-0.5 text-xs leading-relaxed ${r.status === 'pending' ? 'italic text-gray-400' : 'text-gray-500'}`}>
+                {r.status === 'pending' ? 'Waiting…' : r.message}
+              </p>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }
@@ -220,11 +279,19 @@ export function KpiStudio() {
     const kpiId = candidate.kpiId;
     const allResults = MOCK_VALIDATION_RESULTS[kpiId] ?? synthesizeValidationStages(candidate);
 
-    // Simulate stages completing one by one
-    setValidationResults([]);
+    // Pre-seed all stages as pending so the full pipeline is visible immediately
+    setValidationResults(
+      allResults.map(r => ({ stage: r.stage, status: 'pending', message: '', durationMs: 0 }))
+    );
+
     allResults.forEach((result, i) => {
       setTimeout(() => {
-        setValidationResults(prev => [...(prev ?? []), result]);
+        setValidationResults(prev => {
+          if (!prev) return prev;
+          const next = [...prev];
+          next[i] = result;
+          return next;
+        });
         if (i === allResults.length - 1) setValidationRunning(false);
       }, (i + 1) * 600);
     });
@@ -319,14 +386,14 @@ export function KpiStudio() {
         </div>
 
         {/* Right panel: candidate + validation */}
-        <div className="col-span-4 flex flex-col gap-4 overflow-auto">
-          {/* Candidate KPI */}
-          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden flex-shrink-0">
-            <div className="border-b border-gray-200 px-4 py-3">
+        <div className="col-span-4 flex flex-col gap-4 min-h-0">
+          {/* Candidate KPI — own scroll, capped to 45% so Validation stays visible */}
+          <div className="rounded-xl border border-gray-200 bg-white flex flex-col flex-shrink-0 max-h-[45%]">
+            <div className="border-b border-gray-200 px-4 py-3 flex-shrink-0">
               <h3 className="text-sm font-semibold text-gray-700">Candidate KPI</h3>
             </div>
             {candidate ? (
-              <div className="p-4 space-y-3">
+              <div className="overflow-y-auto p-4 space-y-3">
                 <div>
                   <div className="text-sm font-semibold text-gray-900">{candidate.displayName}</div>
                   <p className="text-xs text-gray-500 mt-0.5">{candidate.description}</p>
@@ -351,7 +418,7 @@ export function KpiStudio() {
                 </div>
                 <div>
                   <div className="text-xs text-gray-400 mb-1">SQL Logic</div>
-                  <pre className="rounded-lg bg-gray-900 p-3 text-xs text-gray-100 overflow-x-auto"><code>{candidate.sqlLogic}</code></pre>
+                  <pre className="rounded-lg bg-gray-900 p-3 text-xs text-gray-100 overflow-auto max-h-40"><code>{candidate.sqlLogic}</code></pre>
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -359,7 +426,7 @@ export function KpiStudio() {
                     disabled={validationRunning}
                     className="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition"
                   >
-                    {validationRunning ? 'Validating...' : 'Run Validation'}
+                    {validationRunning ? 'Validating…' : 'Run Validation'}
                   </button>
                   <button className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
                     Edit
@@ -373,14 +440,14 @@ export function KpiStudio() {
             )}
           </div>
 
-          {/* Validation pipeline */}
-          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden flex-1 min-h-0 flex flex-col">
-            <div className="border-b border-gray-200 px-4 py-3">
+          {/* Validation pipeline — takes remaining space, owns its own scroll */}
+          <div className="rounded-xl border border-gray-200 bg-white flex flex-col flex-1 min-h-0">
+            <div className="border-b border-gray-200 px-4 py-3 flex-shrink-0">
               <h3 className="text-sm font-semibold text-gray-700">Validation Pipeline</h3>
             </div>
-            <div className="flex-1 overflow-auto p-4">
+            <div className="flex-1 min-h-0 p-4">
               {validationResults ? (
-                <ValidationPanel results={validationResults} />
+                <ValidationPanel results={validationResults} running={validationRunning} />
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-gray-400">
                   Click "Run Validation" to start the pipeline.
