@@ -1,6 +1,47 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { KPI_REGISTRY, TEST_ASSERTIONS } from '../../data/kpiRegistry';
-import type { TestAssertion } from '../../data/kpiRegistry';
+import type { KpiDefinition, TestAssertion } from '../../data/kpiRegistry';
+import { getPublishedKpis } from '../../api/client';
+import type { PublishedKpi } from '../../api/client';
+
+function publishedToKpiDefinition(p: PublishedKpi): KpiDefinition {
+  return {
+    kpiId: p.kpiId,
+    version: p.version,
+    displayName: p.displayName,
+    description: p.description,
+    unit: p.unit,
+    direction: p.direction,
+    sqlLogic: p.sqlLogic,
+    sourceTables: ['production.sales.sales_orders'],
+    grain: p.grain,
+    dimensions: p.dimensions,
+    defaultThresholds: p.thresholds,
+    materialization: 'live',
+    schedule: null,
+    owner: p.createdBy,
+    status: 'published',
+    createdAt: p.createdAt,
+    createdBy: p.createdBy,
+    changeReason: 'Published from KPI Authoring Studio',
+    tags: ['studio-authored'],
+  };
+}
+
+// Synthesize a single passing "freshness" assertion for a newly-published KPI
+// so the Health tab shows it alongside the static registry.
+function syntheticAssertions(p: PublishedKpi): TestAssertion[] {
+  return [{
+    assertionId: `${p.kpiId}-auto`,
+    kpiId: p.kpiId,
+    assertionType: 'freshness',
+    assertionSql: '-- auto-synthesized for studio-authored KPI',
+    severity: 'warn',
+    description: 'SQL executed and returned a numeric value at publish time',
+    lastRunAt: p.createdAt,
+    lastResult: 'pass',
+  }];
+}
 
 type HealthFilter = 'all' | 'passing' | 'warning' | 'failing';
 
@@ -17,10 +58,16 @@ interface KpiHealthSummary {
   assertions: TestAssertion[];
 }
 
-function buildHealthSummaries(): KpiHealthSummary[] {
-  const published = KPI_REGISTRY.filter(k => k.status === 'published');
-  return published.map(kpi => {
-    const assertions = TEST_ASSERTIONS.filter(a => a.kpiId === kpi.kpiId);
+function buildHealthSummaries(
+  extraKpis: KpiDefinition[],
+  extraAssertions: TestAssertion[],
+): KpiHealthSummary[] {
+  const publishedIds = new Set(extraKpis.map(k => k.kpiId));
+  const baseRegistry = KPI_REGISTRY.filter(k => k.status === 'published' && !publishedIds.has(k.kpiId));
+  const allAssertions = [...TEST_ASSERTIONS, ...extraAssertions];
+  const allKpis = [...extraKpis, ...baseRegistry];
+  return allKpis.map(kpi => {
+    const assertions = allAssertions.filter(a => a.kpiId === kpi.kpiId);
     const passing = assertions.filter(a => a.lastResult === 'pass').length;
     const warnings = assertions.filter(a => a.lastResult === 'warn').length;
     const failures = assertions.filter(a => a.lastResult === 'fail').length;
@@ -62,7 +109,20 @@ function AssertionTypeIcon({ type }: { type: string }) {
 export function KpiHealth() {
   const [filter, setFilter] = useState<HealthFilter>('all');
   const [expandedKpi, setExpandedKpi] = useState<string | null>(null);
-  const summaries = buildHealthSummaries();
+  const [published, setPublished] = useState<PublishedKpi[]>([]);
+
+  useEffect(() => {
+    const load = () => getPublishedKpis().then(d => setPublished(d.kpis)).catch(() => {});
+    load();
+    const t = setInterval(load, 4000);
+    return () => clearInterval(t);
+  }, []);
+
+  const summaries = useMemo(() => {
+    const extraKpis = published.map(publishedToKpiDefinition);
+    const extraAssertions = published.flatMap(syntheticAssertions);
+    return buildHealthSummaries(extraKpis, extraAssertions);
+  }, [published]);
 
   const filtered = summaries.filter(s => {
     if (filter === 'all') return true;

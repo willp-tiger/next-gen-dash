@@ -13,6 +13,7 @@ import refinementRouter from './routes/refinement.js';
 import chatRouter from './routes/chat.js';
 import dashboardChatRouter from './routes/dashboardChat.js';
 import kpiStudioRouter from './routes/kpiStudio.js';
+import kpisRouter from './routes/kpis.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -29,6 +30,7 @@ app.use('/api/refinement', refinementRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/dashboard-chat', dashboardChatRouter);
 app.use('/api/kpi-studio', kpiStudioRouter);
+app.use('/api/kpis', kpisRouter);
 
 // Production: serve static frontend
 if (process.env.NODE_ENV === 'production') {

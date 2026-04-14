@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { CATALOG_TABLES, MOCK_VALIDATION_RESULTS } from '../../data/kpiRegistry';
 import type { CatalogTable, ValidationResult } from '../../data/kpiRegistry';
-import { kpiStudioChat, ApiError } from '../../api/client';
+import { kpiStudioChat, publishKpi, ApiError } from '../../api/client';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -237,6 +237,8 @@ export function KpiStudio() {
   const [candidate, setCandidate] = useState<CandidateKpi | null>(null);
   const [validationResults, setValidationResults] = useState<ValidationResult[] | null>(null);
   const [validationRunning, setValidationRunning] = useState(false);
+  const [publishStatus, setPublishStatus] = useState<'idle' | 'publishing' | 'published'>('idle');
+  const [publishError, setPublishError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const userIdRef = useRef<string>(`kpi-studio-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
 
@@ -257,6 +259,8 @@ export function KpiStudio() {
       if (res.candidate) {
         setCandidate(res.candidate as CandidateKpi);
         setValidationResults(null);
+        setPublishStatus('idle');
+        setPublishError(null);
       }
     } catch (err) {
       let text = 'Something went wrong talking to the assistant. Please try again.';
@@ -270,6 +274,23 @@ export function KpiStudio() {
       if (offline.candidate) setCandidate(offline.candidate);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    if (!candidate) return;
+    setPublishStatus('publishing');
+    setPublishError(null);
+    try {
+      await publishKpi(userIdRef.current, candidate);
+      setPublishStatus('published');
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `Published \"${candidate.displayName}\" (${candidate.kpiId}). You can now add it to your dashboard by asking the Dashboard Assistant — for example, \"add ${candidate.displayName}\". It also appears in the KPI Catalog and KPI Health tabs.`,
+      }]);
+    } catch (err) {
+      setPublishStatus('idle');
+      setPublishError(err instanceof Error ? err.message : 'Publish failed');
     }
   };
 
@@ -420,18 +441,34 @@ export function KpiStudio() {
                   <div className="text-xs text-gray-400 mb-1">SQL Logic</div>
                   <pre className="rounded-lg bg-gray-900 p-3 text-xs text-gray-100 overflow-auto max-h-40"><code>{candidate.sqlLogic}</code></pre>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleValidate}
-                    disabled={validationRunning}
-                    className="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition"
-                  >
-                    {validationRunning ? 'Validating…' : 'Run Validation'}
-                  </button>
-                  <button className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
-                    Edit
-                  </button>
-                </div>
+                {(() => {
+                  const validationComplete = validationResults && !validationRunning && validationResults.length > 0 && !validationResults.some(r => r.status === 'pending' || r.status === 'fail');
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleValidate}
+                          disabled={validationRunning || publishStatus === 'publishing'}
+                          className="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition"
+                        >
+                          {validationRunning ? 'Validating…' : 'Run Validation'}
+                        </button>
+                        <button
+                          onClick={handlePublish}
+                          disabled={!validationComplete || publishStatus !== 'idle'}
+                          title={validationComplete ? 'Publish to Catalog, Health, and make available to the dashboard' : 'Run validation first'}
+                          className="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                        >
+                          {publishStatus === 'publishing' ? 'Publishing…' : publishStatus === 'published' ? 'Published ✓' : 'Publish'}
+                        </button>
+                      </div>
+                      {publishError && <p className="text-xs text-red-600">{publishError}</p>}
+                      {publishStatus === 'published' && (
+                        <p className="text-xs text-emerald-700">Live in Catalog, Health, and the dashboard chat. Try "add {candidate.displayName}" in the Dashboard Assistant.</p>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             ) : (
               <div className="p-8 text-center text-sm text-gray-400">

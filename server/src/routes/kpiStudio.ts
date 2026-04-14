@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import { KPI_STUDIO_SYSTEM_PROMPT } from '../prompts/kpiStudio.js';
 import { classifyLLMError } from '../services/llmErrors.js';
+import { publishKpi } from '../services/kpiStore.js';
 
 const router = Router();
 const client = new Anthropic();
@@ -98,6 +99,40 @@ router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) 
 router.delete('/:userId', (req: Request<{ userId: string }>, res: Response) => {
   histories.delete(req.params.userId);
   res.json({ ok: true });
+});
+
+interface PublishBody {
+  kpiId: string;
+  displayName: string;
+  description: string;
+  unit: string;
+  direction: 'higher-is-better' | 'lower-is-better';
+  sqlLogic: string;
+  grain: string;
+  dimensions: string[];
+  thresholds: { greenMax: number; yellowMax: number };
+}
+
+router.post('/:userId/publish', (req: Request<{ userId: string }>, res: Response) => {
+  const body = req.body as Partial<PublishBody>;
+  const missing = ['kpiId', 'displayName', 'sqlLogic', 'unit', 'direction'].filter(k => !body[k as keyof PublishBody]);
+  if (missing.length) {
+    res.status(400).json({ error: `Missing fields: ${missing.join(', ')}` });
+    return;
+  }
+  const kpi = publishKpi({
+    kpiId: body.kpiId!,
+    displayName: body.displayName!,
+    description: body.description ?? '',
+    unit: body.unit!,
+    direction: body.direction!,
+    sqlLogic: body.sqlLogic!,
+    grain: body.grain ?? 'all-time',
+    dimensions: body.dimensions ?? [],
+    thresholds: body.thresholds ?? { greenMax: 0, yellowMax: 0 },
+    createdBy: req.params.userId,
+  });
+  res.json({ ok: true, kpi });
 });
 
 export default router;

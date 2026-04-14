@@ -171,3 +171,21 @@ export function kpiStudioChat(userId: string, message: string) {
 export function resetKpiStudio(userId: string) {
   return fetchJson<{ ok: true }>(`/kpi-studio/${userId}`, { method: 'DELETE' });
 }
+
+export interface PublishedKpi extends KpiCandidatePayload {
+  createdAt: string;
+  createdBy: string;
+  version: number;
+  status: 'published';
+}
+
+export function publishKpi(userId: string, candidate: KpiCandidatePayload) {
+  return fetchJson<{ ok: true; kpi: PublishedKpi }>(`/kpi-studio/${userId}/publish`, {
+    method: 'POST',
+    body: JSON.stringify(candidate),
+  });
+}
+
+export function getPublishedKpis() {
+  return fetchJson<{ kpis: PublishedKpi[] }>('/kpis/published');
+}

@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { DASHBOARD_CHAT_SYSTEM_PROMPT } from '../prompts/dashboardChat.js';
 import { getConfig, setConfig } from '../services/configStore.js';
 import { classifyLLMError } from '../services/llmErrors.js';
+import { getPublishedKpis } from '../services/kpiStore.js';
 import type { DashboardConfig, MetricConfig } from '../../../shared/types.js';
 
 const router = Router();
@@ -68,7 +69,12 @@ router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) 
       .map(m => `- ${m.label} (${m.id}): ${m.chartType}, size=${m.size}, thresholds green=${m.thresholds.green.max} yellow=${m.thresholds.yellow.max} ${m.thresholds.direction}`)
       .join('\n');
 
-    const contextMessage = `Current dashboard metrics:\n${currentMetrics}\n\nUser request: ${message}`;
+    const published = getPublishedKpis();
+    const publishedSection = published.length > 0
+      ? `\n\nAdditional KPIs the user has authored in the Studio (also addable via "add" action):\n${published.map(k => `- ${k.displayName} (${k.kpiId}) — ${k.unit}, ${k.direction}. ${k.description}`).join('\n')}`
+      : '';
+
+    const contextMessage = `Current dashboard metrics:\n${currentMetrics}${publishedSection}\n\nUser request: ${message}`;
 
     // Get or create chat history
     const history = chatHistories.get(userId) || [];

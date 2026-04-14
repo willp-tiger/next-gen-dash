@@ -1,4 +1,6 @@
 import pool from './db.js';
+import { getPublishedKpi, getPublishedKpis } from './kpiStore.js';
+import type { PublishedKpi } from './kpiStore.js';
 import type {
   MetricsSnapshot,
   MetricValue,
@@ -186,15 +188,18 @@ function applyFilters(baseSql: string, filters?: FilterState): { sql: string; pa
 
 async function queryMetric(def: MetricDefinition, filters?: FilterState): Promise<MetricValue> {
   const { sql, params } = applyFilters(def.sql, filters);
-  const { sql: trendSql, params: trendParams } = applyFilters(def.trendSql, filters);
 
-  const [valueRes, trendRes] = await Promise.all([
-    pool.query(sql, params),
-    pool.query(trendSql, trendParams),
-  ]);
+  const queries: Promise<{ rows: { value: string }[] }>[] = [pool.query(sql, params)];
+  if (def.trendSql) {
+    const { sql: trendSql, params: trendParams } = applyFilters(def.trendSql, filters);
+    queries.push(pool.query(trendSql, trendParams));
+  }
+  const [valueRes, trendRes] = await Promise.all(queries);
 
   const current = parseFloat(valueRes.rows[0]?.value ?? 0);
-  const trend = trendRes.rows.map((r: { value: string }) => parseFloat(r.value || '0'));
+  const trend = trendRes
+    ? trendRes.rows.map((r: { value: string }) => parseFloat(r.value || '0'))
+    : [current, current, current, current];
   const prev = trend.length >= 2 ? trend[trend.length - 2] : current;
   const delta = parseFloat((current - prev).toFixed(2));
 
@@ -205,12 +210,54 @@ async function queryMetric(def: MetricDefinition, filters?: FilterState): Promis
   };
 }
 
-export async function generateSnapshot(metricIds?: string[], filters?: FilterState): Promise<MetricsSnapshot> {
-  const defs = metricIds
-    ? METRIC_DEFS.filter(d => metricIds.includes(d.id))
-    : METRIC_DEFS;
+// Published KPIs from the Studio carry only a single `sqlLogic`. Normalize it
+// for the real Postgres schema (strip the fictional Unity Catalog qualifier
+// and any :year/:quarter template placeholders) and adapt the shape to
+// MetricDefinition so queryMetric can reuse the same pipeline.
+function normalizePublishedSql(sql: string): string {
+  return sql
+    .replace(/production\.\w+\.sales_orders/g, 'sales_orders')
+    .replace(/\s+WHERE\s+[^;]*?:[a-z_]+[^;]*$/i, '')
+    .trim();
+}
 
-  const results = await Promise.all(defs.map(d => queryMetric(d, filters)));
+function publishedToDef(k: PublishedKpi): MetricDefinition {
+  return {
+    id: k.kpiId,
+    label: k.displayName,
+    unit: k.unit,
+    chartType: 'number',
+    direction: k.direction,
+    greenMax: k.thresholds.greenMax,
+    yellowMax: k.thresholds.yellowMax,
+    sql: normalizePublishedSql(k.sqlLogic),
+    trendSql: '', // No trend for published KPIs — queryMetric synthesizes a flat series
+  };
+}
+
+function resolveDefs(metricIds?: string[]): MetricDefinition[] {
+  if (!metricIds) {
+    return [...METRIC_DEFS, ...getPublishedKpis().map(publishedToDef)];
+  }
+  const out: MetricDefinition[] = [];
+  for (const id of metricIds) {
+    const builtIn = METRIC_DEFS.find(d => d.id === id);
+    if (builtIn) { out.push(builtIn); continue; }
+    const pub = getPublishedKpi(id);
+    if (pub) { out.push(publishedToDef(pub)); continue; }
+  }
+  return out;
+}
+
+export async function generateSnapshot(metricIds?: string[], filters?: FilterState): Promise<MetricsSnapshot> {
+  const defs = resolveDefs(metricIds);
+
+  const results = await Promise.all(defs.map(d =>
+    queryMetric(d, filters).catch((err) => {
+      console.error(`Metric ${d.id} failed:`, err?.message ?? err);
+      return { current: 0, trend: [], delta: 0 } as MetricValue;
+    })
+  ));
   const metrics: Record<string, MetricValue> = {};
   defs.forEach((d, i) => { metrics[d.id] = results[i]; });
 

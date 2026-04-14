@@ -1,6 +1,32 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { KPI_REGISTRY, TEST_ASSERTIONS, VERSION_HISTORY } from '../../data/kpiRegistry';
 import type { KpiDefinition } from '../../data/kpiRegistry';
+import { getPublishedKpis } from '../../api/client';
+import type { PublishedKpi } from '../../api/client';
+
+function publishedToKpiDefinition(p: PublishedKpi): KpiDefinition {
+  return {
+    kpiId: p.kpiId,
+    version: p.version,
+    displayName: p.displayName,
+    description: p.description,
+    unit: p.unit,
+    direction: p.direction,
+    sqlLogic: p.sqlLogic,
+    sourceTables: ['production.sales.sales_orders'],
+    grain: p.grain,
+    dimensions: p.dimensions,
+    defaultThresholds: p.thresholds,
+    materialization: 'live',
+    schedule: null,
+    owner: p.createdBy,
+    status: 'published',
+    createdAt: p.createdAt,
+    createdBy: p.createdBy,
+    changeReason: 'Published from KPI Authoring Studio',
+    tags: ['studio-authored'],
+  };
+}
 
 const STATUS_STYLES: Record<string, string> = {
   published: 'bg-emerald-100 text-emerald-700',
@@ -168,8 +194,24 @@ export function KpiCatalog() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedKpi, setSelectedKpi] = useState<KpiDefinition | null>(null);
+  const [published, setPublished] = useState<PublishedKpi[]>([]);
 
-  const filtered = KPI_REGISTRY.filter(kpi => {
+  useEffect(() => {
+    const load = () => getPublishedKpis().then(d => setPublished(d.kpis)).catch(() => {});
+    load();
+    // Poll periodically so a newly-published KPI appears without a manual refresh
+    const t = setInterval(load, 4000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Studio-published KPIs override built-in registry entries if IDs collide
+  const registry = useMemo(() => {
+    const publishedIds = new Set(published.map(p => p.kpiId));
+    const base = KPI_REGISTRY.filter(k => !publishedIds.has(k.kpiId));
+    return [...published.map(publishedToKpiDefinition), ...base];
+  }, [published]);
+
+  const filtered = registry.filter(kpi => {
     const matchesSearch = search === '' ||
       kpi.displayName.toLowerCase().includes(search.toLowerCase()) ||
       kpi.description.toLowerCase().includes(search.toLowerCase()) ||
@@ -178,7 +220,7 @@ export function KpiCatalog() {
     return matchesSearch && matchesStatus;
   });
 
-  const statusCounts = KPI_REGISTRY.reduce((acc, kpi) => {
+  const statusCounts = registry.reduce((acc, kpi) => {
     acc[kpi.status] = (acc[kpi.status] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
