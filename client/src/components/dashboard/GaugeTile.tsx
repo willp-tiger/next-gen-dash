@@ -51,9 +51,13 @@ export function GaugeTile({ metric, value, userId, onClick }: GaugeTileProps) {
   const theta = Math.PI * (1 - percent);
   const endX = cx + r * Math.cos(theta);
   const endY = cy - r * Math.sin(theta);
-  const largeArc = percent > 0.5 ? 1 : 0;
-
-  const arcPath = `M ${startX} ${startY} A ${r} ${r} 0 ${largeArc} 1 ${endX} ${endY}`;
+  // A semicircle gauge's sweep is always ≤ 180°, so always use the "short"
+  // arc (largeArc=0). Previously largeArc=1 for percent>0.5 made the browser
+  // pick a different candidate circle that fit the same radius, causing the
+  // fulfillment gauge to render past 3 o'clock down through 4 o'clock.
+  const arcPath = `M ${startX} ${startY} A ${r} ${r} 0 0 1 ${endX} ${endY}`;
+  // Background: full semicircle. Endpoints are diametrically opposite, which
+  // is a special case — largeArc=1 here picks the over-the-top 180° arc.
   const bgPath = `M ${cx - r} ${cy} A ${r} ${r} 0 1 1 ${cx + r} ${cy}`;
 
   const handleClick = () => {
