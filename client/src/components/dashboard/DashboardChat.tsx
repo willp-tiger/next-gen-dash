@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import type { DashboardConfig } from 'shared/types';
-import { dashboardChat } from '../../api/client';
+import { dashboardChat, ApiError } from '../../api/client';
 
 interface DashboardChatProps {
   userId: string;
@@ -53,11 +53,13 @@ export function DashboardChat({ userId, onConfigUpdate }: DashboardChatProps) {
       if (res.config) {
         onConfigUpdate(res.config);
       }
-    } catch {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        text: 'Sorry, something went wrong. Try again.',
-      }]);
+    } catch (err) {
+      let text = 'Sorry, something went wrong. Try again.';
+      if (err instanceof ApiError && err.status === 503) {
+        const body = err.body as { message?: string } | null;
+        if (body?.message) text = body.message;
+      }
+      setMessages(prev => [...prev, { role: 'assistant', text }]);
     } finally {
       setIsLoading(false);
     }

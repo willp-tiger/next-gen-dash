@@ -323,12 +323,38 @@ describe('Chat parser resilience', () => {
     expect(res.body.message).toMatch(/rephrase|parse|try/i);
   });
 
-  it('returns 500 only when the Claude SDK itself throws', async () => {
+  it('returns 500 only when the Claude SDK itself throws an unclassified error', async () => {
     const userId = `throw-${Date.now()}`;
     await adoptPersona(userId, 'sales-rep');
     mockCreate.mockRejectedValue(new Error('Anthropic API upstream failure'));
     const res = await chat(userId, 'add something');
     expect(res.status).toBe(500);
+  });
+
+  it('returns 503 llm_unavailable when Anthropic reports insufficient credits', async () => {
+    const userId = `billing-${Date.now()}`;
+    await adoptPersona(userId, 'sales-rep');
+    // Shape mirrors @anthropic-ai/sdk BadRequestError
+    const billingErr = Object.assign(new Error('400 billing'), {
+      status: 400,
+      error: { error: { type: 'invalid_request_error', message: 'Your credit balance is too low to access the Anthropic API.' } },
+    });
+    mockCreate.mockRejectedValue(billingErr);
+    const res = await chat(userId, 'filter to Q1 2004');
+    expect(res.status).toBe(503);
+    expect(res.body.error).toBe('llm_unavailable');
+    expect(res.body.reason).toBe('billing');
+    expect(res.body.message).toMatch(/credit|unavailable/i);
+  });
+
+  it('returns 503 llm_unavailable on 429 rate limit', async () => {
+    const userId = `rl-${Date.now()}`;
+    await adoptPersona(userId, 'sales-rep');
+    const rateErr = Object.assign(new Error('429'), { status: 429 });
+    mockCreate.mockRejectedValue(rateErr);
+    const res = await chat(userId, 'anything');
+    expect(res.status).toBe(503);
+    expect(res.body.reason).toBe('rate_limit');
   });
 
   it('400s when message body is missing', async () => {

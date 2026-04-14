@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { InterpretRequest, DashboardConfig } from '../../../shared/types.js';
 import { interpretPrompt } from '../services/claude.js';
 import { setConfig } from '../services/configStore.js';
+import { classifyLLMError } from '../services/llmErrors.js';
 
 const router = Router();
 
@@ -38,6 +39,11 @@ router.post('/', async (req: Request, res: Response) => {
     res.json({ config });
   } catch (err) {
     console.error('Interpret error:', err);
+    const classified = classifyLLMError(err);
+    if (classified) {
+      res.status(503).json(classified);
+      return;
+    }
     res.status(500).json({ error: 'Failed to interpret prompt' });
   }
 });

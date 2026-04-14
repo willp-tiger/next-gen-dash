@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import { DASHBOARD_CHAT_SYSTEM_PROMPT } from '../prompts/dashboardChat.js';
 import { getConfig, setConfig } from '../services/configStore.js';
+import { classifyLLMError } from '../services/llmErrors.js';
 import type { DashboardConfig, MetricConfig } from '../../../shared/types.js';
 
 const router = Router();
@@ -180,6 +181,11 @@ router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) 
     });
   } catch (err) {
     console.error('Dashboard chat error:', err);
+    const classified = classifyLLMError(err);
+    if (classified) {
+      res.status(503).json(classified);
+      return;
+    }
     res.status(500).json({ error: 'Dashboard chat failed' });
   }
 });

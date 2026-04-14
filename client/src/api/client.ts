@@ -10,14 +10,27 @@ import type {
 
 const BASE_URL = '/api';
 
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+  constructor(status: number, body: unknown, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${url}`, {
     headers: { 'Content-Type': 'application/json' },
     ...init,
   });
   if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`API ${res.status}: ${body || res.statusText}`);
+    const text = await res.text().catch(() => '');
+    let body: unknown = text;
+    try { body = JSON.parse(text); } catch { /* leave as text */ }
+    throw new ApiError(res.status, body, `API ${res.status}: ${text || res.statusText}`);
   }
   return res.json();
 }

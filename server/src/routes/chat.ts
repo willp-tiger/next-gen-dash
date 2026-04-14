@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import { ONBOARDING_SYSTEM_PROMPT } from '../prompts/onboarding.js';
+import { classifyLLMError } from '../services/llmErrors.js';
 
 const router = Router();
 const client = new Anthropic();
@@ -65,6 +66,11 @@ router.post('/', async (req: Request, res: Response) => {
     });
   } catch (err) {
     console.error('Chat error:', err);
+    const classified = classifyLLMError(err);
+    if (classified) {
+      res.status(503).json(classified);
+      return;
+    }
     res.status(500).json({ error: 'Chat failed' });
   }
 });

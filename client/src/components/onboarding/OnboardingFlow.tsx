@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import type { DashboardConfig } from 'shared/types';
-import { chatMessage, interpretPrompt, getPersonaConfigs, updateDashboardConfig } from '../../api/client';
+import { chatMessage, interpretPrompt, getPersonaConfigs, updateDashboardConfig, ApiError } from '../../api/client';
 
 interface OnboardingFlowProps {
   userId: string;
@@ -155,11 +155,13 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
     } catch (err) {
       setIsTyping(false);
       setIsBuilding(false);
-      setError('Something went wrong. Please try again.');
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', text: 'Sorry, something went wrong. Could you try that again?' },
-      ]);
+      let text = 'Sorry, something went wrong. Could you try that again?';
+      if (err instanceof ApiError && err.status === 503) {
+        const body = err.body as { message?: string } | null;
+        if (body?.message) text = body.message;
+      }
+      setError(text);
+      setMessages((prev) => [...prev, { role: 'assistant', text }]);
     }
   };
 
@@ -189,12 +191,14 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
             setError('Something went wrong building the dashboard.');
           });
         }
-      }).catch(() => {
+      }).catch((err) => {
         setIsTyping(false);
-        setMessages((prev) => [
-          ...prev,
-          { role: 'assistant', text: 'Sorry, something went wrong. Could you try that again?' },
-        ]);
+        let fallback = 'Sorry, something went wrong. Could you try that again?';
+        if (err instanceof ApiError && err.status === 503) {
+          const body = err.body as { message?: string } | null;
+          if (body?.message) fallback = body.message;
+        }
+        setMessages((prev) => [...prev, { role: 'assistant', text: fallback }]);
       });
     }, 100);
   };
