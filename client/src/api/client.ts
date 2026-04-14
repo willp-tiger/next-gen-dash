@@ -145,3 +145,29 @@ export function dashboardChat(userId: string, message: string) {
 export function resetDashboardChat(userId: string) {
   return fetchJson<{ ok: true }>(`/dashboard-chat/${userId}`, { method: 'DELETE' });
 }
+
+export interface KpiCandidatePayload {
+  displayName: string;
+  description: string;
+  kpiId: string;
+  unit: string;
+  direction: 'higher-is-better' | 'lower-is-better';
+  sqlLogic: string;
+  grain: string;
+  dimensions: string[];
+  thresholds: { greenMax: number; yellowMax: number };
+}
+
+export function kpiStudioChat(userId: string, message: string) {
+  return fetchJson<{ message: string; candidate: KpiCandidatePayload | null }>(
+    `/kpi-studio/${userId}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    }
+  );
+}
+
+export function resetKpiStudio(userId: string) {
+  return fetchJson<{ ok: true }>(`/kpi-studio/${userId}`, { method: 'DELETE' });
+}
