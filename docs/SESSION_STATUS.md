@@ -26,6 +26,24 @@
 - [x] Dockerfile (multi-stage build)
 - [x] Fix server TypeScript build error (chat.ts param typing)
 
+## Session 2026-04-14 (pm-2): Studio → Catalog / Health / Dashboard plumbing
+- New `server/src/services/kpiStore.ts` holds published KPIs in memory (Map
+  keyed by kpiId, versioned on re-publish).
+- `POST /api/kpi-studio/:userId/publish` persists a candidate; `GET /api/kpis/published` returns the list.
+- `salesData.resolveDefs` merges `METRIC_DEFS` with kpiStore so
+  `generateSnapshot` queries published KPIs through the same pipeline. SQL
+  normalized on the fly: `production.sales.sales_orders` → `sales_orders`,
+  trailing `:year`/`:quarter` WHERE clauses stripped. Per-metric errors
+  now caught so one failing KPI doesn't 500 the whole snapshot.
+- `dashboardChat` handler injects a "Additional KPIs the user has authored
+  in the Studio" section into the context message each turn.
+- Client: `publishKpi` / `getPublishedKpis` helpers, green Publish button
+  in KpiStudio (enabled only after clean validation), Catalog + Health
+  poll `/api/kpis/published` every 4s and merge into the static registry.
+- Verified E2E on Railway with Playwright: create → validate → publish →
+  Catalog shows studio-authored tag → Health shows synthetic passing
+  assertion → dashboard chat "add X" renders the tile with live data.
+
 ## Next Session Goals
 - Verify live on Railway that `order_date` is the actual column name; if not,
   update `applyFilters`/`buildConditions` and `getAvailableFilters` in
