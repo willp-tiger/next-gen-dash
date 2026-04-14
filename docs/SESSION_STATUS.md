@@ -27,8 +27,31 @@
 - [x] Fix server TypeScript build error (chat.ts param typing)
 
 ## Next Session Goals
-- Consider chunk splitting to address 500kB bundle warning
-- Update CLAUDE.md phase checklist to reflect completion
+- Verify live on Railway that `order_date` is the actual column name; if not,
+  update `applyFilters`/`buildConditions` and `getAvailableFilters` in
+  `server/src/services/salesData.ts`.
+- Consider persisting global filters server-side when the user changes them
+  via the FilterBar (currently only chat-driven changes write to
+  `config.globalFilters`; manual FilterBar edits stay in local React state).
+- Consider chunk splitting to address 500kB bundle warning.
+- Update CLAUDE.md phase checklist to reflect completion.
+
+## Session 2026-04-14 (pm): Chat-generated date/time & global filters
+- `FilterState` gains `dateStart`/`dateEnd`; `DashboardConfig` gains
+  `globalFilters`. Chat `filter` action now writes to `globalFilters` and
+  applies to every tile, not just breakdown charts.
+- SQL helpers consolidated into `buildConditions`; date filters render as
+  `order_date >= $n` / `order_date <= $n`. `getAvailableFilters` exposes
+  dataset `minDate`/`maxDate` for UI clamping.
+- `/api/metrics` and `/api/metrics/categorical` accept full filter query
+  params including date range; client `getMetrics(ids, filters)` forwards
+  them.
+- `FilterBar` adds From/To date inputs; `Dashboard` seeds filters from
+  `config.globalFilters` and passes them into every metric fetch.
+- Chat prompt teaches the model to produce absolute ISO dates for phrases
+  like "Q1 2004" and to emit `{action:"filter", clear:true}` for clear
+  requests.
+- Assumption: column is `order_date`. Verify on Railway.
 
 ## Session 2026-04-14: Dashboard-chat fix & number formatting polish
 - Fixed dashboard-chat 404 after picking a pre-built persona. `handlePersonaPick`

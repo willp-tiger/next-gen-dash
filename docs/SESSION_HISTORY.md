@@ -1,5 +1,60 @@
 # Session History
 
+## Session 2026-04-14 (pm): Chat-generated date/time and global filters
+
+**Completed Tasks:**
+- Extended `FilterState` with `dateStart` / `dateEnd` (ISO `YYYY-MM-DD`) and
+  added optional `DashboardConfig.globalFilters` so chat-authored filters
+  affect every tile, not only breakdown charts.
+- Refactored `server/src/services/salesData.ts` around a single
+  `buildConditions(filters, startIdx)` helper used by both `applyFilters`
+  (WHERE injection for metric/trend SQL) and `buildFilterWhere` (categorical
+  queries). Date filters render as `order_date >= $n` / `order_date <= $n`.
+- `getAvailableFilters` now returns `minDate` / `maxDate` via
+  `SELECT MIN(order_date), MAX(order_date) FROM sales_orders`, so the UI's
+  date pickers can clamp to the dataset range (2003–2005).
+- `GET /api/metrics` and `GET /api/metrics/categorical` now read
+  `product_line`, `country`, `territory`, `deal_size`, `dateStart`, `dateEnd`
+  query params. Client `getMetrics(ids, filters)` serializes them via a shared
+  `buildFilterParams` helper.
+- Dashboard chat prompt (`server/src/prompts/dashboardChat.ts`) documents the
+  date dimension, instructs the model to resolve relative phrases ("Q1 2004",
+  "last 30 days") into absolute ISO dates, and adds a `{"action":"filter",
+  "clear":true}` shape.
+- `server/src/routes/dashboardChat.ts` filter handler now writes into
+  `config.globalFilters` (dropping null/empty keys), supports full-clear, and
+  still mirrors the filter onto breakdown-chart `filterBy` so existing
+  breakdown rendering keeps working.
+- `FilterBar` gains two `<input type="date">` controls (From / To), bounded by
+  the dataset `minDate` / `maxDate`; a Clear button wipes every filter
+  including the new date range.
+- `Dashboard` seeds `filters` from `config.globalFilters`, forwards `filters`
+  into `getMetrics`, and auto-opens the filter bar when chat sets globals or
+  an existing config arrives with globals.
+- Chat input placeholder updated to hint at filter usage.
+
+**Technical Decisions:**
+- Put global filters on `DashboardConfig`, not a separate API. The config is
+  already round-tripped via PUT `/api/dashboard/:userId`, so chat-authored
+  filters persist through reloads without new endpoints.
+- Kept per-breakdown `filterBy` in sync with globals rather than ripping it
+  out, because breakdown charts fetch through `/api/metrics/categorical` with
+  the metric's `filterBy` as their filter source. Dual-writing is cheap and
+  avoids a bigger refactor of BreakdownChart.
+- Date comparisons use `order_date >= $n AND order_date <= $n` (inclusive) so
+  "Jan 2004" end-dates can be `2004-01-31` without off-by-one confusion.
+
+**Assumption to verify:**
+- The Postgres column is assumed to be `order_date`. This matches the
+  snake_case convention used across `salesData.ts` (`product_line`,
+  `order_number`, `customer_name`, `year_id`, `qtr_id`, `price_each`,
+  `quantity_ordered`) and the client semantic registry in
+  `client/src/data/kpiRegistry.ts`. If Railway's table uses a different name,
+  swap the two references in `salesData.ts:applyFilters` (via
+  `buildConditions`) and `getAvailableFilters`.
+
+**Verification:** `npm run build` clean, 53 tests pass.
+
 ## Session 2026-04-14: Dashboard-chat 404 fix and number formatting polish
 
 **Completed Tasks:**

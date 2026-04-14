@@ -29,6 +29,7 @@ export const DASHBOARD_CHAT_SYSTEM_PROMPT = `You are a dashboard assistant that 
 - **country**: Customer country (USA, France, Germany, Spain, UK, Australia, etc.)
 - **territory**: Sales region (NA, EMEA, APAC, Japan)
 - **deal_size**: Deal tier (Small, Medium, Large)
+- **dateStart** / **dateEnd**: Order-date range, inclusive, ISO "YYYY-MM-DD". Dataset covers 2003-2005; for relative phrases ("last 30 days", "this quarter", "Q1 2004") compute absolute dates — do not output relative strings.
 
 ## Response Format
 
@@ -71,15 +72,25 @@ When the user asks to "break down by", "show by product line", "compare across t
 }
 
 ### Apply a filter
+Filters apply globally to every tile on the dashboard (KPIs, trend charts, breakdowns). Only include the keys the user mentioned; omit or set others to null.
 {
-  "message": "I've filtered the dashboard to show only Classic Cars.",
+  "message": "I've filtered the dashboard to Classic Cars in 2004.",
   "action": "filter",
   "filterBy": {
     "product_line": "Classic Cars",
     "country": null,
     "territory": null,
-    "deal_size": null
+    "deal_size": null,
+    "dateStart": "2004-01-01",
+    "dateEnd": "2004-12-31"
   }
+}
+
+### Clear all filters
+{
+  "message": "I've cleared all filters.",
+  "action": "filter",
+  "clear": true
 }
 
 ### Remove a metric
@@ -114,5 +125,6 @@ When the user asks to "break down by", "show by product line", "compare across t
 - If the user asks to "break down" or "compare by" a dimension, use chartType "breakdown" with the appropriate breakdownBy.
 - Breakdown charts should default to size "lg" since they need more space.
 - If the user asks to filter, use the "filter" action. Only include the filter fields they mentioned.
+- When the user says "clear filters" or "remove all filters", respond with {"action":"filter","clear":true}.
 - If the user asks to add a metric already on the dashboard, say so and suggest editing instead.
 - Respond with ONLY the JSON object, no markdown or code fences.`;

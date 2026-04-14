@@ -59,28 +59,32 @@ export function Dashboard({ config, userId }: DashboardProps) {
 
   // Keep user config in sync with prop
   useEffect(() => {
-    if (!isCanonical) setActiveConfig(config);
+    if (!isCanonical) {
+      setActiveConfig(config);
+      if (config.globalFilters) setFilters(config.globalFilters);
+    }
   }, [config, isCanonical]);
 
-  // Show filter bar when any metric has a filter or breakdown
+  // Show filter bar when any metric has a filter or breakdown or a global filter is set
   useEffect(() => {
     const hasBreakdown = activeConfig.metrics.some(m => m.chartType === 'breakdown' || m.chartType === 'heatmap' || m.filterBy);
-    if (hasBreakdown && !showFilters) setShowFilters(true);
-  }, [activeConfig.metrics, showFilters]);
+    const hasGlobal = !!(activeConfig.globalFilters && Object.keys(activeConfig.globalFilters).length > 0);
+    if ((hasBreakdown || hasGlobal) && !showFilters) setShowFilters(true);
+  }, [activeConfig.metrics, activeConfig.globalFilters, showFilters]);
 
   const fetchMetrics = useCallback(async () => {
     try {
       const ids = activeConfig.metrics
         .filter((m) => m.visible && m.chartType !== 'breakdown')
         .map((m) => m.id);
-      const data = await getMetrics(ids);
+      const data = await getMetrics(ids, filters);
       setSnapshot(data);
     } catch {
       // ignore fetch errors
     } finally {
       setLoading(false);
     }
-  }, [activeConfig.metrics]);
+  }, [activeConfig.metrics, filters]);
 
   // Initial fetch + auto-refresh every 10s
   useEffect(() => {
@@ -155,13 +159,17 @@ export function Dashboard({ config, userId }: DashboardProps) {
 
   const handleConfigUpdate = (newConfig: DashboardConfig) => {
     setActiveConfig(newConfig);
-    // If new config has filters, apply them
-    const filterMetric = newConfig.metrics.find(m => m.filterBy);
-    if (filterMetric?.filterBy) {
-      setFilters(filterMetric.filterBy);
+    // Prefer global filters from chat; fall back to breakdown's filterBy
+    if (newConfig.globalFilters !== undefined) {
+      setFilters(newConfig.globalFilters || {});
       setShowFilters(true);
+    } else {
+      const filterMetric = newConfig.metrics.find(m => m.filterBy);
+      if (filterMetric?.filterBy) {
+        setFilters(filterMetric.filterBy);
+        setShowFilters(true);
+      }
     }
-    // If any breakdown chart added, show filter bar
     if (newConfig.metrics.some(m => m.chartType === 'breakdown' || m.chartType === 'heatmap')) {
       setShowFilters(true);
     }

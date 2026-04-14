@@ -11,7 +11,16 @@ router.get('/', async (req: Request, res: Response) => {
       ? metricIdsParam.split(',').map((id) => id.trim())
       : undefined;
 
-    const snapshot = await generateSnapshot(metricIds);
+    const filters = {
+      product_line: req.query.product_line as string | undefined,
+      country: req.query.country as string | undefined,
+      territory: req.query.territory as string | undefined,
+      deal_size: req.query.deal_size as string | undefined,
+      dateStart: req.query.dateStart as string | undefined,
+      dateEnd: req.query.dateEnd as string | undefined,
+    };
+
+    const snapshot = await generateSnapshot(metricIds, filters);
     res.json(snapshot);
   } catch (err) {
     console.error('Metrics error:', err);
@@ -57,6 +66,8 @@ router.get('/categorical', async (req: Request, res: Response) => {
       country: req.query.country as string | undefined,
       territory: req.query.territory as string | undefined,
       deal_size: req.query.deal_size as string | undefined,
+      dateStart: req.query.dateStart as string | undefined,
+      dateEnd: req.query.dateEnd as string | undefined,
     };
 
     const snapshot = await generateCategoricalSnapshot(metricIds, filters);

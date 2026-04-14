@@ -156,7 +156,7 @@ export function DashboardChat({ userId, onConfigUpdate }: DashboardChatProps) {
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 disabled={isLoading}
-                placeholder="e.g., Add a breakdown of revenue by territory"
+                placeholder="e.g., Filter to Classic Cars in Q1 2004"
                 className="flex-1 rounded-xl border border-gray-300 px-3 py-2 text-sm placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 disabled:bg-gray-50"
               />
               <button

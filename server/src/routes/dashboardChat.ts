@@ -91,11 +91,23 @@ router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) 
         setConfig(userId, config);
         updatedConfig = config;
       }
-    } else if (action === 'filter' && parsed.filterBy) {
-      // Apply filter to all breakdown metrics
-      for (const metric of config.metrics) {
-        if (metric.chartType === 'breakdown') {
-          metric.filterBy = { ...metric.filterBy, ...parsed.filterBy };
+    } else if (action === 'filter') {
+      if (parsed.clear) {
+        config.globalFilters = {};
+        for (const metric of config.metrics) {
+          if (metric.chartType === 'breakdown') metric.filterBy = {};
+        }
+      } else if (parsed.filterBy) {
+        // Drop null/undefined keys so we only merge explicit values
+        const incoming: Record<string, string> = {};
+        for (const [k, v] of Object.entries(parsed.filterBy)) {
+          if (v !== null && v !== undefined && v !== '') incoming[k] = String(v);
+        }
+        config.globalFilters = { ...config.globalFilters, ...incoming };
+        for (const metric of config.metrics) {
+          if (metric.chartType === 'breakdown') {
+            metric.filterBy = { ...metric.filterBy, ...incoming };
+          }
         }
       }
       config.updatedAt = new Date().toISOString();

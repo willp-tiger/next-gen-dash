@@ -160,20 +160,25 @@ const METRIC_DEFS: MetricDefinition[] = [
   },
 ];
 
-function applyFilters(baseSql: string, filters?: FilterState): { sql: string; params: unknown[] } {
+function buildConditions(filters: FilterState | undefined, startIdx: number): { conditions: string[]; params: unknown[] } {
   const conditions: string[] = [];
   const params: unknown[] = [];
-  let idx = 1;
+  let idx = startIdx;
 
   if (filters?.product_line) { conditions.push(`product_line = $${idx++}`); params.push(filters.product_line); }
   if (filters?.country) { conditions.push(`country = $${idx++}`); params.push(filters.country); }
   if (filters?.territory) { conditions.push(`territory = $${idx++}`); params.push(filters.territory); }
   if (filters?.deal_size) { conditions.push(`deal_size = $${idx++}`); params.push(filters.deal_size); }
+  if (filters?.dateStart) { conditions.push(`order_date >= $${idx++}`); params.push(filters.dateStart); }
+  if (filters?.dateEnd) { conditions.push(`order_date <= $${idx++}`); params.push(filters.dateEnd); }
 
+  return { conditions, params };
+}
+
+function applyFilters(baseSql: string, filters?: FilterState): { sql: string; params: unknown[] } {
+  const { conditions, params } = buildConditions(filters, 1);
   if (conditions.length === 0) return { sql: baseSql, params: [] };
 
-  // Inject WHERE clause into the base SQL
-  // For subqueries, we need to add filters to the inner sales_orders references
   const filterClause = conditions.join(' AND ');
   const modified = baseSql.replace(/FROM sales_orders/g, `FROM sales_orders WHERE ${filterClause}`);
   return { sql: modified, params };
@@ -239,22 +244,17 @@ export async function generateCategoricalSnapshot(
 }
 
 function buildFilterWhere(filters?: FilterState): { sql: string; params: unknown[] } {
-  const conditions: string[] = [];
-  const params: unknown[] = [];
-  let idx = 1;
-  if (filters?.product_line) { conditions.push(`product_line = $${idx++}`); params.push(filters.product_line); }
-  if (filters?.country) { conditions.push(`country = $${idx++}`); params.push(filters.country); }
-  if (filters?.territory) { conditions.push(`territory = $${idx++}`); params.push(filters.territory); }
-  if (filters?.deal_size) { conditions.push(`deal_size = $${idx++}`); params.push(filters.deal_size); }
+  const { conditions, params } = buildConditions(filters, 1);
   return { sql: conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '', params };
 }
 
 export async function getAvailableFilters() {
-  const [productLines, countries, territories, dealSizes] = await Promise.all([
+  const [productLines, countries, territories, dealSizes, dateRange] = await Promise.all([
     pool.query(`SELECT DISTINCT product_line FROM sales_orders ORDER BY product_line`),
     pool.query(`SELECT DISTINCT country FROM sales_orders ORDER BY country`),
     pool.query(`SELECT DISTINCT territory FROM sales_orders ORDER BY territory`),
     pool.query(`SELECT DISTINCT deal_size FROM sales_orders ORDER BY deal_size`),
+    pool.query(`SELECT MIN(order_date)::text AS min_date, MAX(order_date)::text AS max_date FROM sales_orders`),
   ]);
 
   return {
@@ -262,6 +262,8 @@ export async function getAvailableFilters() {
     countries: countries.rows.map((r: { country: string }) => r.country),
     territories: territories.rows.map((r: { territory: string }) => r.territory),
     dealSizes: dealSizes.rows.map((r: { deal_size: string }) => r.deal_size),
+    minDate: dateRange.rows[0]?.min_date ?? null,
+    maxDate: dateRange.rows[0]?.max_date ?? null,
   };
 }
 

@@ -48,11 +48,22 @@ export async function updateDashboardConfig(userId: string, config: DashboardCon
   return data.config;
 }
 
-export function getMetrics(metricIds?: string[]) {
-  const params = metricIds?.length
-    ? `?metricIds=${metricIds.join(',')}`
-    : '';
-  return fetchJson<MetricsSnapshot>(`/metrics${params}`);
+function buildFilterParams(params: URLSearchParams, filters?: FilterState) {
+  if (!filters) return;
+  if (filters.product_line) params.set('product_line', filters.product_line);
+  if (filters.country) params.set('country', filters.country);
+  if (filters.territory) params.set('territory', filters.territory);
+  if (filters.deal_size) params.set('deal_size', filters.deal_size);
+  if (filters.dateStart) params.set('dateStart', filters.dateStart);
+  if (filters.dateEnd) params.set('dateEnd', filters.dateEnd);
+}
+
+export function getMetrics(metricIds?: string[], filters?: FilterState) {
+  const params = new URLSearchParams();
+  if (metricIds?.length) params.set('metricIds', metricIds.join(','));
+  buildFilterParams(params, filters);
+  const qs = params.toString();
+  return fetchJson<MetricsSnapshot>(`/metrics${qs ? '?' + qs : ''}`);
 }
 
 export async function getCanonicalView(): Promise<DashboardConfig> {
@@ -92,10 +103,7 @@ export function updateSuggestion(
 export function getCategoricalMetrics(metricIds?: string[], filters?: FilterState) {
   const params = new URLSearchParams();
   if (metricIds?.length) params.set('metricIds', metricIds.join(','));
-  if (filters?.product_line) params.set('product_line', filters.product_line);
-  if (filters?.country) params.set('country', filters.country);
-  if (filters?.territory) params.set('territory', filters.territory);
-  if (filters?.deal_size) params.set('deal_size', filters.deal_size);
+  buildFilterParams(params, filters);
   const qs = params.toString();
   return fetchJson<CategoricalSnapshot>(`/metrics/categorical${qs ? '?' + qs : ''}`);
 }
@@ -106,6 +114,8 @@ export function getAvailableFilters() {
     countries: string[];
     territories: string[];
     dealSizes: string[];
+    minDate: string | null;
+    maxDate: string | null;
   }>('/metrics/filters');
 }
 

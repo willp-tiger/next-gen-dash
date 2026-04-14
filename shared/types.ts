@@ -8,6 +8,7 @@ export interface DashboardConfig {
   interpretation: Interpretation;
   metrics: MetricConfig[];
   layout: LayoutConfig;
+  globalFilters?: FilterState;
 }
 
 export interface Interpretation {
@@ -86,6 +87,9 @@ export interface FilterState {
   country?: string;
   territory?: string;
   deal_size?: string;
+  // ISO date strings (YYYY-MM-DD). Inclusive date range over order_date.
+  dateStart?: string;
+  dateEnd?: string;
 }
 
 export interface CategoryBreakdown {
