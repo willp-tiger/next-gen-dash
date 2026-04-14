@@ -34,7 +34,7 @@ export function Dashboard({ config, userId }: DashboardProps) {
   const [snapshot, setSnapshot] = useState<MetricsSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<FilterState>({});
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
 
   // Track previous metric IDs for animation
   const prevMetricIds = useRef<Set<string>>(new Set());
