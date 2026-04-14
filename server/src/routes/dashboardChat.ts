@@ -20,7 +20,29 @@ const chatHistories = new Map<string, ChatMessage[]>();
 function extractJSON(text: string): string {
   const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenceMatch) return fenceMatch[1].trim();
-  return text.trim();
+  // Walk the string to find the first balanced {...} block, respecting strings.
+  const s = text;
+  const start = s.indexOf('{');
+  if (start === -1) return s.trim();
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { inStr = true; continue; }
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return s.slice(start, i + 1);
+    }
+  }
+  return s.trim();
 }
 
 router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) => {
@@ -70,7 +92,20 @@ router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) 
     }
 
     // Parse the response
-    const parsed = JSON.parse(extractJSON(rawReply));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let parsed: any;
+    try {
+      parsed = JSON.parse(extractJSON(rawReply));
+    } catch (parseErr) {
+      console.error('Dashboard chat JSON parse failed. Raw reply:', rawReply);
+      console.error('Parse error:', parseErr);
+      res.json({
+        message: "I couldn't quite parse that. Could you rephrase — for example, \"filter to Q1 2004\" or \"show only Classic Cars\"?",
+        action: null,
+        config: null,
+      });
+      return;
+    }
     const replyMessage: string = parsed.message || 'Done.';
     const action: string | undefined = parsed.action;
     let updatedConfig: DashboardConfig | null = null;

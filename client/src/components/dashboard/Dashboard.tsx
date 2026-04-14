@@ -7,7 +7,7 @@ import type {
   FilterState,
   RefinementSuggestion,
 } from 'shared/types';
-import { getMetrics, getCanonicalView } from '../../api/client';
+import { getMetrics, getCanonicalView, updateDashboardConfig } from '../../api/client';
 import { ViewToggle } from './ViewToggle';
 import { MetricTile } from './MetricTile';
 import { GaugeTile } from './GaugeTile';
@@ -39,6 +39,23 @@ export function Dashboard({ config, userId }: DashboardProps) {
   // Track previous metric IDs for animation
   const prevMetricIds = useRef<Set<string>>(new Set());
   const [animatedIds, setAnimatedIds] = useState<Set<string>>(new Set());
+
+  // Debounced PUT so rapid filter edits (typing into date inputs) don't hammer the server
+  const persistTimer = useRef<number | null>(null);
+  const handleFilterChange = (next: FilterState) => {
+    setFilters(next);
+    setActiveConfig(prev => ({ ...prev, globalFilters: next }));
+    // Only persist the real user's config, not canonical or persona views
+    if (isCanonical || activePersona) return;
+    if (persistTimer.current) window.clearTimeout(persistTimer.current);
+    persistTimer.current = window.setTimeout(() => {
+      updateDashboardConfig(userId, {
+        ...activeConfig,
+        globalFilters: next,
+        updatedAt: new Date().toISOString(),
+      }).catch(() => {});
+    }, 400);
+  };
 
   // Detect new/changed metrics and animate them
   useEffect(() => {
@@ -217,7 +234,7 @@ export function Dashboard({ config, userId }: DashboardProps) {
 
       {/* Filter bar - shown when breakdown charts exist */}
       {showFilters && (
-        <FilterBar filters={filters} onFilterChange={setFilters} />
+        <FilterBar filters={filters} onFilterChange={handleFilterChange} />
       )}
 
       {/* Refinement banner */}
