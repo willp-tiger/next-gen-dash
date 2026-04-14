@@ -29,22 +29,32 @@ export function GaugeTile({ metric, value, userId, onClick }: GaugeTileProps) {
     percent = Math.max(1 - value.current / max, 0);
   }
 
-  const angle = percent * 180;
   const strokeColor =
     status === 'healthy' ? '#10b981' : status === 'warning' ? '#f59e0b' : '#ef4444';
 
-  // SVG arc path for semicircle gauge
-  const cx = 60, cy = 60, r = 50;
-  const startAngle = Math.PI; // left
-  const endAngle = startAngle - (angle * Math.PI) / 180;
+  // SVG semicircle gauge. The arc sweeps from the left (9 o'clock) over the
+  // top (12 o'clock) to the right (3 o'clock). SVG's y-axis points DOWN, so
+  // positions on the upper half of the circle have y < cy (not y > cy).
+  //
+  // At proportion p ∈ [0, 1], the traced point is at math-angle π(1-p)
+  // measured from +x. The SVG coordinate is:
+  //   x = cx + r·cos(θ)
+  //   y = cy − r·sin(θ)   // minus because SVG y grows downward
+  //
+  // Sweep-flag = 1 (clockwise in screen space) traces from 9 → 12 → 3, which
+  // is the "over the top" path. Sweep-flag = 0 would route under the bottom.
+  const viewW = 200, viewH = 120;
+  const cx = 100, cy = 100, r = 80;
 
-  const x1 = cx + r * Math.cos(startAngle);
-  const y1 = cy + r * Math.sin(startAngle);
-  const x2 = cx + r * Math.cos(endAngle);
-  const y2 = cy + r * Math.sin(endAngle);
-  const largeArc = angle > 180 ? 1 : 0;
+  const startX = cx - r;
+  const startY = cy;
+  const theta = Math.PI * (1 - percent);
+  const endX = cx + r * Math.cos(theta);
+  const endY = cy - r * Math.sin(theta);
+  const largeArc = percent > 0.5 ? 1 : 0;
 
-  const arcPath = `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 0 ${x2} ${y2}`;
+  const arcPath = `M ${startX} ${startY} A ${r} ${r} 0 ${largeArc} 1 ${endX} ${endY}`;
+  const bgPath = `M ${cx - r} ${cy} A ${r} ${r} 0 1 1 ${cx + r} ${cy}`;
 
   const handleClick = () => {
     if (userId) {
@@ -72,47 +82,48 @@ export function GaugeTile({ metric, value, userId, onClick }: GaugeTileProps) {
         <HealthBadge value={value.current} thresholds={metric.thresholds} />
       </div>
 
-      {/* Gauge */}
-      <div className="mt-2 flex justify-center">
-        <svg width="120" height="70" viewBox="0 0 120 70">
-          {/* Background arc */}
-          <path
-            d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 0 ${cx + r} ${cy}`}
-            fill="none"
-            stroke="#e5e7eb"
-            strokeWidth="8"
-            strokeLinecap="round"
-          />
-          {/* Value arc */}
-          {angle > 0.5 && (
+      {/* Gauge — SVG arc with HTML value overlay for reliable text rendering.
+          Fixed-aspect container so overlay percentages map predictably. */}
+      <div className="mx-auto mt-3 w-full max-w-[220px]">
+        <div className="relative" style={{ aspectRatio: `${viewW} / ${viewH}` }}>
+          <svg
+            viewBox={`0 0 ${viewW} ${viewH}`}
+            preserveAspectRatio="xMidYMid meet"
+            className="absolute inset-0 h-full w-full"
+          >
+            {/* Background arc — full semicircle over the top */}
             <path
-              d={arcPath}
+              d={bgPath}
               fill="none"
-              stroke={strokeColor}
-              strokeWidth="8"
+              stroke="#e5e7eb"
+              strokeWidth="12"
               strokeLinecap="round"
             />
-          )}
-          {/* Center value — placed inside the upper semicircle of the gauge */}
-          <text
-            x={cx}
-            y={40}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            className="fill-gray-900"
-            fontSize="17"
-            fontWeight="700"
+            {/* Value arc — partial sweep from left toward right, over the top */}
+            {percent > 0.005 && (
+              <path
+                d={arcPath}
+                fill="none"
+                stroke={strokeColor}
+                strokeWidth="12"
+                strokeLinecap="round"
+              />
+            )}
+          </svg>
+          {/* Value overlay — centered horizontally, positioned inside the upper
+              semicircle of the arc (arc's diameter is at ~83% from top). */}
+          <div
+            className="pointer-events-none absolute inset-x-0 flex flex-col items-center"
+            style={{ top: '48%' }}
           >
-            {formatValue(value.current, metric.unit)}
-          </text>
-        </svg>
-      </div>
-
-      {/* Delta */}
-      <div className="mt-1 text-center">
-        <span className={`text-sm font-medium ${deltaColor}`}>
-          {formatDelta(value.delta)}
-        </span>
+            <span className="text-2xl font-bold leading-none text-gray-900">
+              {formatValue(value.current, metric.unit)}
+            </span>
+            <span className={`mt-1 text-xs font-medium ${deltaColor}`}>
+              {formatDelta(value.delta)}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
     </MetricTooltip>
