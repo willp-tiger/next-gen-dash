@@ -5,15 +5,17 @@ import { dashboardChat, resetDashboardChat, ApiError } from '../../api/client';
 interface DashboardChatProps {
   userId: string;
   onConfigUpdate: (config: DashboardConfig) => void;
+  onAuthorKpi?: (phrase: string) => void;
 }
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   text: string;
   action?: string | null;
+  authorPhrase?: string | null;
 }
 
-export function DashboardChat({ userId, onConfigUpdate }: DashboardChatProps) {
+export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: DashboardChatProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: 'assistant', text: 'How can I help you modify your dashboard? You can ask me to add, remove, or edit metrics.' },
@@ -49,6 +51,7 @@ export function DashboardChat({ userId, onConfigUpdate }: DashboardChatProps) {
         role: 'assistant',
         text: res.message,
         action: res.action,
+        authorPhrase: res.authorPhrase ?? null,
       }]);
       if (res.config) {
         onConfigUpdate(res.config);
@@ -78,6 +81,8 @@ export function DashboardChat({ userId, onConfigUpdate }: DashboardChatProps) {
       add: 'bg-emerald-100 text-emerald-700',
       remove: 'bg-red-100 text-red-700',
       edit: 'bg-amber-100 text-amber-700',
+      filter: 'bg-blue-100 text-blue-700',
+      author: 'bg-indigo-100 text-indigo-700',
     };
     return (
       <span className={`ml-2 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${colors[action] || 'bg-gray-100 text-gray-700'}`}>
@@ -144,6 +149,19 @@ export function DashboardChat({ userId, onConfigUpdate }: DashboardChatProps) {
                 }`}>
                   {msg.text}
                   {msg.role === 'assistant' && actionBadge(msg.action)}
+                  {msg.role === 'assistant' && msg.action === 'author' && msg.authorPhrase && onAuthorKpi && (
+                    <div className="mt-2">
+                      <button
+                        onClick={() => onAuthorKpi(msg.authorPhrase as string)}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-indigo-700"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                        </svg>
+                        Open in Studio
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

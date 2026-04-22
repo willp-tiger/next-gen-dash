@@ -4,6 +4,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { KPI_STUDIO_SYSTEM_PROMPT } from '../prompts/kpiStudio.js';
 import { classifyLLMError } from '../services/llmErrors.js';
 import { publishKpi } from '../services/kpiStore.js';
+import { validateKpiCandidate, VALIDATION_STAGES } from '../services/kpiValidation.js';
+import type { CandidateKpi } from '../services/kpiValidation.js';
 
 const router = Router();
 const client = new Anthropic();
@@ -112,6 +114,39 @@ interface PublishBody {
   dimensions: string[];
   thresholds: { greenMax: number; yellowMax: number };
 }
+
+router.post('/:userId/validate', async (req: Request<{ userId: string }>, res: Response) => {
+  const candidate = req.body?.candidate as Partial<CandidateKpi> | undefined;
+  if (!candidate || !candidate.sqlLogic || !candidate.unit) {
+    res.status(400).json({ error: 'Missing candidate.sqlLogic or candidate.unit' });
+    return;
+  }
+  res.setHeader('Content-Type', 'application/x-ndjson');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.setHeader('Connection', 'keep-alive');
+  try {
+    for await (const stage of validateKpiCandidate(candidate as CandidateKpi)) {
+      res.write(JSON.stringify(stage) + '\n');
+      if (typeof (res as unknown as { flush?: () => void }).flush === 'function') {
+        (res as unknown as { flush: () => void }).flush();
+      }
+    }
+  } catch (err) {
+    console.error('KPI validation pipeline error:', err);
+    res.write(JSON.stringify({
+      stage: 'Pipeline',
+      status: 'fail',
+      message: err instanceof Error ? err.message : 'Validation pipeline failed',
+      durationMs: 0,
+    }) + '\n');
+  }
+  res.end();
+});
+
+router.get('/stages', (_req: Request, res: Response) => {
+  res.json({ stages: VALIDATION_STAGES });
+});
 
 router.post('/:userId/publish', (req: Request<{ userId: string }>, res: Response) => {
   const body = req.body as Partial<PublishBody>;

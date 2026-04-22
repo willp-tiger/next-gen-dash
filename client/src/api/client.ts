@@ -133,7 +133,12 @@ export function getAvailableFilters() {
 }
 
 export function dashboardChat(userId: string, message: string) {
-  return fetchJson<{ message: string; action: string | null; config: DashboardConfig | null }>(
+  return fetchJson<{
+    message: string;
+    action: string | null;
+    config: DashboardConfig | null;
+    authorPhrase?: string | null;
+  }>(
     `/dashboard-chat/${userId}`,
     {
       method: 'POST',
@@ -177,6 +182,52 @@ export interface PublishedKpi extends KpiCandidatePayload {
   createdBy: string;
   version: number;
   status: 'published';
+}
+
+export interface ValidationStage {
+  stage: string;
+  status: 'pass' | 'warn' | 'fail';
+  message: string;
+  durationMs: number;
+}
+
+export async function streamValidateKpi(
+  userId: string,
+  candidate: KpiCandidatePayload,
+  onStage: (s: ValidationStage) => void
+): Promise<void> {
+  const res = await fetch(`${BASE_URL}/kpi-studio/${userId}/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ candidate }),
+  });
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(() => '');
+    let body: unknown = text;
+    try { body = JSON.parse(text); } catch { /* leave as text */ }
+    throw new ApiError(res.status, body, `Validation request failed: ${res.status} ${text || res.statusText}`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx = buffer.indexOf('\n');
+    while (idx !== -1) {
+      const line = buffer.slice(0, idx).trim();
+      buffer = buffer.slice(idx + 1);
+      if (line) {
+        try { onStage(JSON.parse(line) as ValidationStage); } catch { /* skip malformed line */ }
+      }
+      idx = buffer.indexOf('\n');
+    }
+  }
+  const tail = buffer.trim();
+  if (tail) {
+    try { onStage(JSON.parse(tail) as ValidationStage); } catch { /* ignore */ }
+  }
 }
 
 export function publishKpi(userId: string, candidate: KpiCandidatePayload) {

@@ -23,11 +23,12 @@ import { PersonaSelector } from './PersonaSelector';
 interface DashboardProps {
   config: DashboardConfig;
   userId: string;
+  onAuthorKpi?: (phrase: string) => void;
 }
 
 const EMPTY_VALUE: MetricValue = { current: 0, trend: [], delta: 0 };
 
-export function Dashboard({ config, userId }: DashboardProps) {
+export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
   const [isCanonical, setIsCanonical] = useState(false);
   const [activePersona, setActivePersona] = useState<string | null>(null);
   const [activeConfig, setActiveConfig] = useState<DashboardConfig>(config);
@@ -315,6 +316,7 @@ export function Dashboard({ config, userId }: DashboardProps) {
       <DashboardChat
         userId={userId}
         onConfigUpdate={handleConfigUpdate}
+        onAuthorKpi={onAuthorKpi}
       />
     </div>
   );

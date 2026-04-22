@@ -16,6 +16,12 @@ export default function App() {
   const [dashboardPhase, setDashboardPhase] = useState<DashboardPhase>('onboarding');
   const [config, setConfig] = useState<DashboardConfig | null>(null);
   const [userId] = useState(() => `user-${Date.now()}`);
+  const [studioSeed, setStudioSeed] = useState<string | null>(null);
+
+  const handleAuthorKpi = (phrase: string) => {
+    setStudioSeed(phrase);
+    setActiveTab('studio');
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -51,12 +57,14 @@ export default function App() {
               />
             )}
             {dashboardPhase === 'dashboard' && config && (
-              <Dashboard config={config} userId={userId} />
+              <Dashboard config={config} userId={userId} onAuthorKpi={handleAuthorKpi} />
             )}
           </>
         )}
         {activeTab === 'catalog' && <KpiCatalog />}
-        {activeTab === 'studio' && <KpiStudio />}
+        {activeTab === 'studio' && (
+          <KpiStudio seedPrompt={studioSeed} onSeedConsumed={() => setStudioSeed(null)} />
+        )}
         {activeTab === 'health' && <KpiHealth />}
       </main>
     </div>

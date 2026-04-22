@@ -116,6 +116,7 @@ router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) 
     const replyMessage: string = parsed.message || 'Done.';
     const action: string | undefined = parsed.action;
     let updatedConfig: DashboardConfig | null = null;
+    let authorPhrase: string | null = null;
 
     if (action === 'add' && parsed.metric) {
       const newMetric: MetricConfig = {
@@ -165,6 +166,11 @@ router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) 
         setConfig(userId, config);
         updatedConfig = config;
       }
+    } else if (action === 'author') {
+      const phrase = typeof parsed.authorPhrase === 'string' && parsed.authorPhrase.trim().length > 0
+        ? parsed.authorPhrase.trim()
+        : message.trim();
+      authorPhrase = phrase;
     } else if (action === 'edit' && parsed.metricId && parsed.changes) {
       const metric = config.metrics.find(m => m.id === parsed.metricId);
       if (metric) {
@@ -184,6 +190,7 @@ router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) 
       message: replyMessage,
       action: action || null,
       config: updatedConfig,
+      authorPhrase,
     });
   } catch (err) {
     console.error('Dashboard chat error:', err);

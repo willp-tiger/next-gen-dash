@@ -214,7 +214,7 @@ async function queryMetric(def: MetricDefinition, filters?: FilterState): Promis
 // for the real Postgres schema (strip the fictional Unity Catalog qualifier
 // and any :year/:quarter template placeholders) and adapt the shape to
 // MetricDefinition so queryMetric can reuse the same pipeline.
-function normalizePublishedSql(sql: string): string {
+export function normalizePublishedSql(sql: string): string {
   return sql
     .replace(/production\.\w+\.sales_orders/g, 'sales_orders')
     .replace(/\s+WHERE\s+[^;]*?:[a-z_]+[^;]*$/i, '')

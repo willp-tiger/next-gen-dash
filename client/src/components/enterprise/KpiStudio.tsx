@@ -1,7 +1,18 @@
-import { useState, useRef, useEffect } from 'react';
-import { CATALOG_TABLES, MOCK_VALIDATION_RESULTS } from '../../data/kpiRegistry';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { CATALOG_TABLES } from '../../data/kpiRegistry';
 import type { CatalogTable, ValidationResult } from '../../data/kpiRegistry';
-import { kpiStudioChat, publishKpi, ApiError } from '../../api/client';
+import { kpiStudioChat, publishKpi, streamValidateKpi, ApiError } from '../../api/client';
+
+const PIPELINE_STAGES = [
+  'Schema Validation',
+  'Execution Validation',
+  'Type Validation',
+  'Range Validation',
+  'Null/Empty Validation',
+  'Freshness Validation',
+  'Semantic Validation',
+  'Consistency Validation',
+] as const;
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -82,25 +93,6 @@ const DEMO_FLOWS: Record<string, { reply: string; candidate?: CandidateKpi }> = 
     },
   },
 };
-
-function synthesizeValidationStages(c: CandidateKpi): ValidationResult[] {
-  const tables = Array.from(new Set((c.sqlLogic.match(/production\.\w+\.\w+/g) ?? ['production.sales.sales_orders'])));
-  const tableList = tables.join(', ');
-  const sampleValue = c.unit === 'percent' ? (10 + Math.random() * 80).toFixed(1)
-    : c.unit === 'dollars' ? (1000 + Math.random() * 250000).toFixed(0)
-    : (10 + Math.random() * 400).toFixed(0);
-  const rangeOk = c.unit === 'percent' ? `Value ${sampleValue} is within expected range [0, 100] for percent` : `Value ${sampleValue} looks reasonable for unit "${c.unit}"`;
-  return [
-    { stage: 'Schema Validation', status: 'pass', message: `All referenced tables/columns resolve in the catalog (${tableList})`, durationMs: 280 + Math.floor(Math.random() * 120) },
-    { stage: 'Execution Validation', status: 'pass', message: 'SQL executed successfully, returned 1 row', durationMs: 1200 + Math.floor(Math.random() * 600) },
-    { stage: 'Type Validation', status: 'pass', message: `Result is numeric value ${sampleValue}, consistent with ${c.unit} unit`, durationMs: 100 + Math.floor(Math.random() * 30) },
-    { stage: 'Range Validation', status: 'pass', message: rangeOk, durationMs: 700 + Math.floor(Math.random() * 300) },
-    { stage: 'Null/Empty Validation', status: 'pass', message: 'Query returned non-null result for current period', durationMs: 90 + Math.floor(Math.random() * 30) },
-    { stage: 'Freshness Validation', status: 'pass', message: 'Source table has 2,823 rows across 2003-2005', durationMs: 200 + Math.floor(Math.random() * 40) },
-    { stage: 'Semantic Validation', status: 'pass', message: `Claude confirms: SQL matches the stated definition ("${c.description.slice(0, 80)}${c.description.length > 80 ? '…' : ''}")`, durationMs: 2000 + Math.floor(Math.random() * 500) },
-    { stage: 'Consistency Validation', status: c.dimensions.length >= 3 ? 'pass' : 'warn', message: c.dimensions.length >= 3 ? 'No overlap with existing KPIs; dimensions look well scoped.' : 'Fewer than 3 dimensions — consider whether slice-and-dice will be limited.', durationMs: 1500 + Math.floor(Math.random() * 400) },
-  ];
-}
 
 function offlineFallback(message: string): { reply: string; candidate?: CandidateKpi } {
   const lower = message.toLowerCase();
@@ -230,7 +222,12 @@ function ValidationPanel({ results, running }: { results: ValidationResult[]; ru
   );
 }
 
-export function KpiStudio() {
+interface KpiStudioProps {
+  seedPrompt?: string | null;
+  onSeedConsumed?: () => void;
+}
+
+export function KpiStudio({ seedPrompt, onSeedConsumed }: KpiStudioProps = {}) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -241,15 +238,15 @@ export function KpiStudio() {
   const [publishError, setPublishError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const userIdRef = useRef<string>(`kpi-studio-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const isLoadingRef = useRef(false);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
-    const userMsg = input.trim();
-    setInput('');
+  const sendMessage = useCallback(async (userMsg: string) => {
+    if (!userMsg.trim() || isLoadingRef.current) return;
+    isLoadingRef.current = true;
     setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
     setIsLoading(true);
 
@@ -274,8 +271,26 @@ export function KpiStudio() {
       if (offline.candidate) setCandidate(offline.candidate);
     } finally {
       setIsLoading(false);
+      isLoadingRef.current = false;
     }
+  }, []);
+
+  const handleSend = () => {
+    const userMsg = input.trim();
+    if (!userMsg) return;
+    setInput('');
+    sendMessage(userMsg);
   };
+
+  // When routed here with a seed phrase (from the dashboard chat's "author" CTA),
+  // auto-send it as the first message so the user sees a candidate immediately.
+  const seededRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!seedPrompt || seededRef.current === seedPrompt) return;
+    seededRef.current = seedPrompt;
+    sendMessage(seedPrompt);
+    onSeedConsumed?.();
+  }, [seedPrompt, sendMessage, onSeedConsumed]);
 
   const handlePublish = async () => {
     if (!candidate) return;
@@ -294,28 +309,45 @@ export function KpiStudio() {
     }
   };
 
-  const handleValidate = () => {
+  const handleValidate = async () => {
     if (!candidate) return;
     setValidationRunning(true);
-    const kpiId = candidate.kpiId;
-    const allResults = MOCK_VALIDATION_RESULTS[kpiId] ?? synthesizeValidationStages(candidate);
 
-    // Pre-seed all stages as pending so the full pipeline is visible immediately
+    // Pre-seed every stage as pending so the full pipeline is visible immediately.
     setValidationResults(
-      allResults.map(r => ({ stage: r.stage, status: 'pending', message: '', durationMs: 0 }))
+      PIPELINE_STAGES.map(stage => ({ stage, status: 'pending', message: '', durationMs: 0 }))
     );
 
-    allResults.forEach((result, i) => {
-      setTimeout(() => {
+    try {
+      await streamValidateKpi(userIdRef.current, candidate, (stage) => {
         setValidationResults(prev => {
           if (!prev) return prev;
+          const idx = prev.findIndex(r => r.stage === stage.stage);
+          const incoming: ValidationResult = {
+            stage: stage.stage,
+            status: stage.status,
+            message: stage.message,
+            durationMs: stage.durationMs,
+          };
+          if (idx === -1) return [...prev, incoming];
           const next = [...prev];
-          next[i] = result;
+          next[idx] = incoming;
           return next;
         });
-        if (i === allResults.length - 1) setValidationRunning(false);
-      }, (i + 1) * 600);
-    });
+      });
+    } catch (err) {
+      console.error('Validation stream failed:', err);
+      setValidationResults(prev => {
+        const base = prev ?? PIPELINE_STAGES.map(stage => ({ stage, status: 'pending' as const, message: '', durationMs: 0 }));
+        return base.map(r => r.status === 'pending' ? {
+          ...r,
+          status: 'fail' as const,
+          message: err instanceof ApiError && err.status ? `Validation service returned ${err.status}` : 'Validation service unreachable',
+        } : r);
+      });
+    } finally {
+      setValidationRunning(false);
+    }
   };
 
   return (
