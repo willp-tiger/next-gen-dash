@@ -1,3 +1,19 @@
+// === User Profile ===
+
+export interface UserProfile {
+  email: string;
+  displayName: string;
+  role?: string;
+  createdAt: string;
+  lastLoginAt: string;
+}
+
+export interface AuthResponse {
+  profile: UserProfile;
+  hasConfig: boolean;
+  config?: DashboardConfig;
+}
+
 // === Dashboard Configuration ===
 
 export interface DashboardConfig {

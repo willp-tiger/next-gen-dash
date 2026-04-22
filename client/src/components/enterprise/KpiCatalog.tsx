@@ -108,7 +108,7 @@ function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => v
         <div className="border-b border-slate-100 px-6 py-2 text-sm">
           <span className="text-slate-400">Source Tables: </span>
           {kpi.sourceTables.map(t => (
-            <span key={t} className="mr-2 inline-flex rounded bg-indigo-50 px-2 py-0.5 text-xs font-mono text-indigo-600">{t}</span>
+            <span key={t} className="mr-2 inline-flex rounded bg-accent/10 px-2 py-0.5 text-xs font-mono text-accent">{t}</span>
           ))}
         </div>
 
@@ -119,7 +119,7 @@ function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => v
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`border-b-2 py-3 text-sm font-medium transition ${activeTab === tab ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                className={`border-b-2 py-3 text-sm font-medium transition ${activeTab === tab ? 'border-accent text-accent' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
               >
                 {tab === 'sql' ? 'SQL Logic' : tab === 'tests' ? `Tests (${assertions.length})` : `Versions (${versions.length})`}
               </button>
@@ -163,7 +163,7 @@ function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => v
               <div className="absolute left-2.5 top-0 bottom-0 w-px bg-slate-200" />
               {[...versions].reverse().map((v, i) => (
                 <div key={v.version} className="relative mb-4 last:mb-0">
-                  <div className={`absolute -left-[14px] top-1 h-3 w-3 rounded-full border-2 border-white ${i === 0 ? 'bg-indigo-500' : 'bg-slate-300'}`} />
+                  <div className={`absolute -left-[14px] top-1 h-3 w-3 rounded-full border-2 border-white ${i === 0 ? 'bg-accent' : 'bg-slate-300'}`} />
                   <div className="rounded-lg border border-slate-200 px-4 py-2.5">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-slate-700">v{v.version}</span>
@@ -239,7 +239,7 @@ export function KpiCatalog() {
           <button
             key={status}
             onClick={() => setStatusFilter(statusFilter === status ? 'all' : status)}
-            className={`rounded-lg border px-4 py-3 text-left transition ${statusFilter === status ? 'border-indigo-300 bg-indigo-50 ring-1 ring-indigo-200' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+            className={`rounded-lg border px-4 py-3 text-left transition ${statusFilter === status ? 'border-accent/30 bg-accent/10 ring-1 ring-accent/15' : 'border-slate-200 bg-white hover:border-slate-300'}`}
           >
             <div className="text-2xl font-bold text-slate-900">{statusCounts[status] || 0}</div>
             <div className="text-xs font-medium text-slate-500 capitalize">{status}</div>
@@ -258,7 +258,7 @@ export function KpiCatalog() {
             placeholder="Search by name, description, or tag..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
           />
         </div>
       </div>
@@ -269,7 +269,7 @@ export function KpiCatalog() {
           <button
             key={kpi.kpiId}
             onClick={() => setSelectedKpi(kpi)}
-            className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-indigo-200 hover:shadow-md"
+            className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-navy-200 hover:shadow-md"
           >
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">

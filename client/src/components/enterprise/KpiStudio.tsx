@@ -114,7 +114,7 @@ function SchemaExplorer({ onTableSelect }: { onTableSelect: (t: CatalogTable) =>
           <div key={fullName}>
             <button
               onClick={() => { setExpanded(isOpen ? null : fullName); onTableSelect(table); }}
-              className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-slate-100 ${isOpen ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700'}`}
+              className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-slate-100 ${isOpen ? 'bg-accent/10 text-accent-dark' : 'text-slate-700'}`}
             >
               <svg className={`h-3 w-3 transition ${isOpen ? 'rotate-90' : ''}`} fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
@@ -125,7 +125,7 @@ function SchemaExplorer({ onTableSelect }: { onTableSelect: (t: CatalogTable) =>
               <span className="font-mono text-xs">{table.schema}.{table.table}</span>
             </button>
             {isOpen && (
-              <div className="border-l border-indigo-200 ml-5 mb-1">
+              <div className="border-l border-navy-200 ml-5 mb-1">
                 {table.columns.map(col => (
                   <div key={col.name} className="flex items-center gap-2 py-1 pl-4 pr-3 text-xs">
                     <span className="font-mono text-slate-700">{col.name}</span>
@@ -375,8 +375,8 @@ export function KpiStudio({ seedPrompt, onSeedConsumed }: KpiStudioProps = {}) {
           <div className="flex-1 overflow-auto p-4 space-y-3">
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-100 mb-3">
-                  <svg className="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/10 mb-3">
+                  <svg className="h-6 w-6 text-accent" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
                   </svg>
                 </div>
@@ -387,7 +387,7 @@ export function KpiStudio({ seedPrompt, onSeedConsumed }: KpiStudioProps = {}) {
                     <button
                       key={ex}
                       onClick={() => { setInput(ex); }}
-                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 transition"
+                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 hover:bg-accent/10 hover:border-navy-200 hover:text-accent transition"
                     >
                       {ex}
                     </button>
@@ -398,7 +398,7 @@ export function KpiStudio({ seedPrompt, onSeedConsumed }: KpiStudioProps = {}) {
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] rounded-xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
-                  msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700'
+                  msg.role === 'user' ? 'bg-navy-600 text-white' : 'bg-slate-100 text-slate-700'
                 }`}>
                   {msg.content}
                 </div>
@@ -425,12 +425,12 @@ export function KpiStudio({ seedPrompt, onSeedConsumed }: KpiStudioProps = {}) {
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSend()}
                 placeholder="Describe a metric you want to create..."
-                className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
               />
               <button
                 onClick={handleSend}
                 disabled={!input.trim() || isLoading}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                className="rounded-lg bg-navy-600 px-4 py-2 text-sm font-medium text-white hover:bg-navy-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 Send
               </button>
@@ -481,7 +481,7 @@ export function KpiStudio({ seedPrompt, onSeedConsumed }: KpiStudioProps = {}) {
                         <button
                           onClick={handleValidate}
                           disabled={validationRunning || publishStatus === 'publishing'}
-                          className="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition"
+                          className="flex-1 rounded-lg bg-navy-600 px-3 py-2 text-sm font-medium text-white hover:bg-navy-700 disabled:opacity-50 transition"
                         >
                           {validationRunning ? 'Validating…' : 'Run Validation'}
                         </button>

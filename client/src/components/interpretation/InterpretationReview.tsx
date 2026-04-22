@@ -82,7 +82,7 @@ export function InterpretationReview({
               </div>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
                 <div
-                  className="h-full rounded-full bg-indigo-500 transition-all"
+                  className="h-full rounded-full bg-accent transition-all"
                   style={{
                     width: `${(priority.weight / maxWeight) * 100}%`,
                   }}
@@ -116,7 +116,7 @@ export function InterpretationReview({
                     <h4 className="text-sm font-semibold text-slate-900">
                       {metric.label}
                     </h4>
-                    <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                    <span className="rounded-md bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent-dark">
                       {metric.chartType}
                     </span>
                   </div>
@@ -138,7 +138,7 @@ export function InterpretationReview({
                             Number(e.target.value)
                           )
                         }
-                        className="ml-auto w-20 rounded-md border border-slate-200 px-2 py-1 text-right text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        className="ml-auto w-20 rounded-md border border-slate-200 px-2 py-1 text-right text-xs focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                       />
                     </div>
                     <div className="flex items-center gap-2">
@@ -156,7 +156,7 @@ export function InterpretationReview({
                             Number(e.target.value)
                           )
                         }
-                        className="ml-auto w-20 rounded-md border border-slate-200 px-2 py-1 text-right text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        className="ml-auto w-20 rounded-md border border-slate-200 px-2 py-1 text-right text-xs focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                       />
                     </div>
                     <div className="flex items-center gap-2 text-xs text-slate-400">
@@ -180,7 +180,7 @@ export function InterpretationReview({
                         onClick={() => updateMetric(realIndex, { size })}
                         className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
                           metric.size === size
-                            ? 'bg-indigo-600 text-white'
+                            ? 'bg-navy-600 text-white'
                             : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                         }`}
                       >
@@ -204,7 +204,7 @@ export function InterpretationReview({
         </button>
         <button
           onClick={() => onConfirm(editedConfig)}
-          className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700"
+          className="rounded-lg bg-navy-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-navy-700"
         >
           Looks Good, Build My Dashboard
         </button>

@@ -92,10 +92,22 @@
     @apply relative overflow-hidden rounded-xl bg-white border border-slate-200/60 shadow-sm transition-all duration-200;
   }
   .metric-card:hover {
-    @apply shadow-md border-slate-300/60;
+    @apply shadow-md border-slate-300/60 -translate-y-0.5;
   }
 
   .metric-card-accent {
     @apply absolute left-0 top-0 bottom-0 w-1 rounded-l-xl;
+  }
+
+  /* Enterprise section header line */
+  .section-divider {
+    @apply flex items-center gap-3 mb-4;
+  }
+  .section-divider h3 {
+    @apply text-[11px] font-bold uppercase tracking-wider text-slate-400;
+  }
+  .section-divider::after {
+    content: '';
+    @apply flex-1 border-t border-slate-200;
   }
 }

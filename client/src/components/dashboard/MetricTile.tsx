@@ -16,6 +16,7 @@ export function MetricTile({ metric, value, userId, onClick }: MetricTileProps) 
   const status = getHealthStatus(value.current, metric.thresholds);
   const deltaPositive = value.delta >= 0;
   const deltaColor = deltaPositive ? 'text-emerald-600' : 'text-red-600';
+  const trendLabel = deltaPositive ? 'vs prior period' : 'vs prior period';
 
   const sparkData = value.trend.map((v, i) => ({ i, v }));
 
@@ -38,6 +39,8 @@ export function MetricTile({ metric, value, userId, onClick }: MetricTileProps) 
     onClick?.();
   };
 
+  const target = metric.thresholds.green.max;
+
   return (
     <MetricTooltip metric={metric}>
     <div
@@ -58,13 +61,29 @@ export function MetricTile({ metric, value, userId, onClick }: MetricTileProps) 
           <span className="text-3xl font-bold tracking-tight text-slate-900">
             {formatValue(value.current, metric.unit)}
           </span>
-          <span className={`flex items-center gap-0.5 text-sm font-semibold ${deltaColor}`}>
-            {formatDelta(value.delta)}
-          </span>
         </div>
 
+        {/* Trend indicator with direction arrow and label */}
+        <div className="mt-1.5 flex items-center gap-2">
+          <span className={`flex items-center gap-1 text-sm font-semibold ${deltaColor}`}>
+            <svg className={`h-3.5 w-3.5 ${deltaPositive ? '' : 'rotate-180'}`} fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
+            </svg>
+            {formatDelta(value.delta)}
+          </span>
+          <span className="text-[10px] font-medium text-slate-400">{trendLabel}</span>
+        </div>
+
+        {/* Target comparison */}
+        {target > 0 && (
+          <div className="mt-2 flex items-center gap-2 text-[10px] font-medium text-slate-400">
+            <span>Target: {formatValue(target, metric.unit)}</span>
+            <div className="h-px flex-1 bg-slate-100" />
+          </div>
+        )}
+
         {sparkData.length > 1 && (
-          <div className="mt-3 h-12">
+          <div className="mt-2 h-12">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={sparkData}>
                 <defs>

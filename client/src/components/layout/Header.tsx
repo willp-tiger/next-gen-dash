@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import type { UserProfile } from 'shared/types';
+
 export type AppTab = 'dashboard' | 'catalog' | 'studio' | 'health';
 
 interface HeaderProps {
@@ -5,104 +8,122 @@ interface HeaderProps {
   onTabChange: (tab: AppTab) => void;
   dashboardPhase: 'onboarding' | 'review' | 'dashboard';
   onReset: () => void;
+  sidebarCollapsed: boolean;
+  user?: UserProfile | null;
+  onLogout?: () => void;
 }
 
-const TABS: { key: AppTab; label: string; icon: React.ReactNode }[] = [
-  {
-    key: 'dashboard',
-    label: 'Dashboard',
-    icon: (
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-      </svg>
-    ),
-  },
-  {
-    key: 'catalog',
-    label: 'KPI Catalog',
-    icon: (
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-      </svg>
-    ),
-  },
-  {
-    key: 'studio',
-    label: 'KPI Studio',
-    icon: (
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
-      </svg>
-    ),
-  },
-  {
-    key: 'health',
-    label: 'KPI Health',
-    icon: (
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-      </svg>
-    ),
-  },
-];
+const TAB_LABELS: Record<AppTab, string> = {
+  dashboard: 'Dashboard',
+  catalog: 'KPI Catalog',
+  studio: 'KPI Studio',
+  health: 'KPI Health',
+};
 
-export function Header({ activeTab, onTabChange, dashboardPhase, onReset }: HeaderProps) {
+const TAB_SUBTITLES: Record<AppTab, string> = {
+  dashboard: 'Real-time queue health metrics',
+  catalog: 'Browse and manage KPI definitions',
+  studio: 'Author new KPIs with AI assistance',
+  health: 'Monitor KPI data quality and freshness',
+};
+
+function getInitials(name: string): string {
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
+export function Header({ activeTab, dashboardPhase, onReset, sidebarCollapsed, user, onLogout }: HeaderProps) {
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
   return (
-    <header className="border-b border-slate-200/80 bg-white/95 backdrop-blur-sm sticky top-0 z-30">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-indigo-700 shadow-sm shadow-indigo-600/25">
-              <svg
-                className="h-5 w-5 text-white"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={2}
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"
-                />
-              </svg>
+    <header
+      className="sticky top-0 z-40 border-b border-navy-800/50"
+      style={{ background: 'linear-gradient(135deg, hsl(210, 50%, 16%) 0%, hsl(210, 55%, 12%) 100%)' }}
+    >
+      <div
+        className="flex items-center justify-between px-6 py-3 transition-all duration-300"
+        style={{ marginLeft: sidebarCollapsed ? 68 : 240 }}
+      >
+        <div className="flex items-center gap-4 pl-2 lg:pl-0">
+          <div className="w-9 lg:hidden" />
+          <div>
+            <div className="flex items-center gap-3">
+              <h2 className="text-base font-bold text-white tracking-wide uppercase">
+                {TAB_LABELS[activeTab]}
+              </h2>
             </div>
-            <div className="flex items-baseline gap-2">
-              <h1 className="text-lg font-bold tracking-tight text-slate-900">
-                Sales Analytics
-              </h1>
-              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[9px] font-bold text-indigo-600 uppercase tracking-widest ring-1 ring-indigo-600/10">
-                Enterprise
-              </span>
-            </div>
+            <p className="text-xs text-navy-300 mt-0.5">{TAB_SUBTITLES[activeTab]}</p>
           </div>
+        </div>
 
+        <div className="flex items-center gap-4">
           {activeTab === 'dashboard' && dashboardPhase !== 'onboarding' && (
             <button
               onClick={onReset}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:border-slate-300"
+              className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-navy-200 transition hover:bg-white/10 hover:text-white"
             >
               Start Over
             </button>
           )}
-        </div>
 
-        <nav className="-mb-px flex gap-1">
-          {TABS.map(tab => (
+          <div className="hidden sm:flex items-center gap-2 text-xs text-navy-300">
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="font-medium">{dateStr} {timeStr}</span>
+          </div>
+
+          <div className="h-5 w-px bg-white/15 hidden sm:block" />
+
+          {/* User menu */}
+          <div className="relative">
             <button
-              key={tab.key}
-              onClick={() => onTabChange(tab.key)}
-              className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-                activeTab === tab.key
-                  ? 'border-indigo-600 text-indigo-600'
-                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
-              }`}
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className="flex items-center gap-2.5 rounded-lg px-2 py-1 transition hover:bg-white/5"
             >
-              {tab.icon}
-              {tab.label}
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20 text-xs font-bold text-accent-light">
+                {user ? getInitials(user.displayName) : '?'}
+              </div>
+              {user && (
+                <div className="hidden sm:block text-left">
+                  <p className="text-xs font-semibold text-white leading-tight">{user.displayName}</p>
+                  <p className="text-[10px] text-navy-300 leading-tight">{user.email}</p>
+                </div>
+              )}
+              <svg className="h-3 w-3 text-navy-300 hidden sm:block" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              </svg>
             </button>
-          ))}
-        </nav>
+
+            {showUserMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
+                <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl bg-white border border-slate-200/60 shadow-xl shadow-slate-900/10 p-2">
+                  {user && (
+                    <div className="px-3 py-2 border-b border-slate-100 mb-1">
+                      <p className="text-sm font-semibold text-slate-900">{user.displayName}</p>
+                      <p className="text-xs text-slate-500">{user.email}</p>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      onLogout?.();
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                    </svg>
+                    Sign Out
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </header>
   );

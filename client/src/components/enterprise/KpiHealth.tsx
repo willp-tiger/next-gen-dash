@@ -204,7 +204,7 @@ export function KpiHealth() {
             key={f.key}
             onClick={() => setFilter(f.key)}
             className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-              filter === f.key ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              filter === f.key ? 'bg-navy-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
             }`}
           >
             {f.label}

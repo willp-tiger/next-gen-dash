@@ -60,12 +60,12 @@ export function RefinementBanner({ userId, onAccept }: RefinementBannerProps) {
   if (!suggestion || dismissed) return null;
 
   return (
-    <div className="animate-slide-in mb-4 overflow-hidden rounded-xl bg-indigo-50 ring-1 ring-indigo-200">
+    <div className="animate-slide-in mb-4 overflow-hidden rounded-xl bg-accent/10 ring-1 ring-navy-200">
       <div className="flex items-center gap-4 px-5 py-3">
         {/* Lightbulb icon */}
-        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100">
+        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-accent/10">
           <svg
-            className="h-4 w-4 text-indigo-600"
+            className="h-4 w-4 text-accent"
             fill="none"
             viewBox="0 0 24 24"
             strokeWidth={2}
@@ -79,7 +79,7 @@ export function RefinementBanner({ userId, onAccept }: RefinementBannerProps) {
           </svg>
         </div>
 
-        <p className="flex-1 text-sm text-indigo-900">{suggestion.reason}</p>
+        <p className="flex-1 text-sm text-navy-900">{suggestion.reason}</p>
 
         <div className="flex flex-shrink-0 items-center gap-2">
           <button

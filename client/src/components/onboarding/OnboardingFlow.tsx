@@ -212,7 +212,7 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
 
   if (mode === 'pick') {
     const colorMap: Record<string, { bg: string; border: string; icon: string; ring: string }> = {
-      indigo: { bg: 'bg-indigo-50', border: 'border-indigo-200 hover:border-indigo-400', icon: 'bg-indigo-100 text-indigo-600', ring: 'ring-indigo-500' },
+      indigo: { bg: 'bg-accent/10', border: 'border-navy-200 hover:border-navy-400', icon: 'bg-accent/10 text-accent', ring: 'ring-accent' },
       violet: { bg: 'bg-violet-50', border: 'border-violet-200 hover:border-violet-400', icon: 'bg-violet-100 text-violet-600', ring: 'ring-violet-500' },
       emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200 hover:border-emerald-400', icon: 'bg-emerald-100 text-emerald-600', ring: 'ring-emerald-500' },
     };
@@ -237,7 +237,7 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
               >
                 {isLoading && (
                   <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-white/60">
-                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600" />
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-navy-200 border-t-navy-600" />
                   </div>
                 )}
                 <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${c.icon} mb-3`}>
@@ -267,7 +267,7 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
             onClick={() => setMode('chat')}
             className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:border-slate-400"
           >
-            <svg className="h-4 w-4 text-indigo-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <svg className="h-4 w-4 text-accent" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
             </svg>
             Build a custom dashboard with AI
@@ -285,7 +285,7 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
         <div className="flex items-center justify-center gap-3 mb-1">
           <button
             onClick={() => setMode('pick')}
-            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+            className="text-xs text-accent hover:text-accent-dark font-medium"
           >
             &larr; Back to dashboard picker
           </button>
@@ -312,7 +312,7 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
               </div>
               <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-50">
                 <div
-                  className="h-full rounded-full bg-indigo-500 transition-all duration-700 ease-out"
+                  className="h-full rounded-full bg-accent transition-all duration-700 ease-out"
                   style={{ width: `${progress}%` }}
                 />
               </div>
@@ -334,7 +334,7 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
             <div
               className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                 msg.role === 'user'
-                  ? 'bg-indigo-600 text-white'
+                  ? 'bg-navy-600 text-white'
                   : 'bg-slate-50 text-slate-800'
               }`}
             >
@@ -363,7 +363,7 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
                 <button
                   key={i}
                   onClick={() => handleExampleClick(prompt)}
-                  className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-left text-sm text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-100"
+                  className="rounded-xl border border-navy-200 bg-accent/10 px-4 py-2.5 text-left text-sm text-accent-dark transition hover:border-navy-300 hover:bg-accent/15"
                 >
                   {prompt}
                 </button>
@@ -374,7 +374,7 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
 
         {isBuilding && (
           <div className="flex flex-col items-center gap-3 py-8">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-navy-200 border-t-navy-600" />
             <p className="text-sm font-medium text-slate-600">
               Building your personalized dashboard...
             </p>
@@ -392,12 +392,12 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
           onKeyDown={handleKeyDown}
           disabled={isTyping || isBuilding}
           placeholder={isBuilding ? 'Building your dashboard...' : 'Type your answer...'}
-          className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:bg-slate-50"
+          className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm transition focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:bg-slate-50"
         />
         <button
           onClick={handleSend}
           disabled={!input.trim() || isTyping || isBuilding}
-          className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-xl bg-navy-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-navy-700 focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Send
         </button>

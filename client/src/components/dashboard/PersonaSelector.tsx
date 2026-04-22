@@ -64,19 +64,19 @@ export function PersonaSelector({ onSelect, activePersona }: PersonaSelectorProp
               }}
               className={`flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition ${
                 activePersona === key
-                  ? 'bg-indigo-50 ring-1 ring-indigo-200'
+                  ? 'bg-accent/10 ring-1 ring-accent/20'
                   : 'hover:bg-slate-50'
               }`}
             >
               <div className={`mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${
-                activePersona === key ? 'bg-indigo-100' : 'bg-slate-100'
+                activePersona === key ? 'bg-accent/15' : 'bg-slate-100'
               }`}>
-                <svg className={`h-4 w-4 ${activePersona === key ? 'text-indigo-600' : 'text-slate-500'}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <svg className={`h-4 w-4 ${activePersona === key ? 'text-accent' : 'text-slate-500'}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d={meta.icon} />
                 </svg>
               </div>
               <div>
-                <p className={`text-sm font-semibold ${activePersona === key ? 'text-indigo-900' : 'text-slate-900'}`}>
+                <p className={`text-sm font-semibold ${activePersona === key ? 'text-navy-900' : 'text-slate-900'}`}>
                   {meta.label}
                 </p>
                 <p className="text-xs text-slate-500">{meta.description}</p>

@@ -6,6 +6,7 @@ import type {
   RefinementSuggestion,
   CategoricalSnapshot,
   FilterState,
+  AuthResponse,
 } from 'shared/types';
 
 const BASE_URL = '/api';
@@ -239,4 +240,18 @@ export function publishKpi(userId: string, candidate: KpiCandidatePayload) {
 
 export function getPublishedKpis() {
   return fetchJson<{ kpis: PublishedKpi[] }>('/kpis/published');
+}
+
+export function login(email: string, password: string) {
+  return fetchJson<AuthResponse>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export function register(email: string, displayName: string, password: string) {
+  return fetchJson<AuthResponse>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ email, displayName, password }),
+  });
 }

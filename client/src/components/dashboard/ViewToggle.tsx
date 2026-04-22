@@ -10,7 +10,7 @@ export function ViewToggle({ isCanonical, onToggle }: ViewToggleProps) {
         onClick={() => onToggle(false)}
         className={`rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all ${
           !isCanonical
-            ? 'bg-white text-slate-900 shadow-sm'
+            ? 'bg-white text-navy-700 shadow-sm'
             : 'text-slate-500 hover:text-slate-700'
         }`}
       >
@@ -20,7 +20,7 @@ export function ViewToggle({ isCanonical, onToggle }: ViewToggleProps) {
         onClick={() => onToggle(true)}
         className={`rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all ${
           isCanonical
-            ? 'bg-white text-slate-900 shadow-sm'
+            ? 'bg-white text-navy-700 shadow-sm'
             : 'text-slate-500 hover:text-slate-700'
         }`}
       >

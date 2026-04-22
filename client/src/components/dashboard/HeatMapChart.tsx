@@ -54,7 +54,7 @@ export function HeatMapChart({ metric, onClick }: HeatMapChartProps) {
     return (
       <div className={`metric-card p-5 ${metric.size === 'lg' ? 'col-span-2' : ''}`}>
         <div className="flex h-40 items-center justify-center">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600" />
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-navy-200 border-t-navy-600" />
         </div>
       </div>
     );

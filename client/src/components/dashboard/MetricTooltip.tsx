@@ -60,7 +60,7 @@ export function MetricTooltip({ metric, children }: MetricTooltipProps) {
             <p className="mt-1.5 text-[10px] font-medium text-slate-500 uppercase tracking-wider">{directionLabel}</p>
 
             {metric.reasoning && (
-              <p className="mt-2 border-t border-slate-700 pt-2 italic text-indigo-300">
+              <p className="mt-2 border-t border-slate-700 pt-2 italic text-accent-light">
                 &ldquo;{metric.reasoning}&rdquo;
               </p>
             )}

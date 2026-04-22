@@ -9,7 +9,7 @@ interface BreakdownChartProps {
   onClick?: () => void;
 }
 
-const COLORS = ['#6366f1', '#8b5cf6', '#a78bfa', '#c4b5fd', '#818cf8', '#4f46e5'];
+const COLORS = ['#1a6b8a', '#2980a8', '#3b97c0', '#5aaecd', '#7cc2da', '#0f5a75'];
 
 const TOOLTIP_STYLE = {
   fontSize: 12,
@@ -66,7 +66,7 @@ export function BreakdownChart({ metric, onClick }: BreakdownChartProps) {
         <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
           {metric.label}
         </h3>
-        <span className="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-0.5 text-[10px] font-semibold text-indigo-600 ring-1 ring-indigo-600/10">
+        <span className="inline-flex items-center rounded-full bg-accent/10 px-2.5 py-0.5 text-[10px] font-semibold text-accent-dark ring-1 ring-accent/15">
           by {dimLabel}{filterLabel}
         </span>
       </div>
@@ -109,7 +109,7 @@ export function BreakdownChart({ metric, onClick }: BreakdownChartProps) {
         </ResponsiveContainer>
       ) : (
         <div className="flex h-32 items-center justify-center">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600" />
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-navy-200 border-t-navy-600" />
         </div>
       )}
     </div>

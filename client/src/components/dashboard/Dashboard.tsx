@@ -222,7 +222,7 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
                   : 'My Dashboard'}
               </h2>
               {!isCanonical && !activePersona && (
-                <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-[10px] font-bold text-indigo-600 ring-1 ring-indigo-600/10 uppercase tracking-wider">
+                <span className="rounded-full bg-accent/10 px-2.5 py-0.5 text-[10px] font-bold text-accent-dark ring-1 ring-accent/15 uppercase tracking-wider">
                   Personalized
                 </span>
               )}
