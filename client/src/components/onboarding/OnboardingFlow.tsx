@@ -220,8 +220,8 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
     return (
       <div className="mx-auto max-w-3xl py-8">
         <div className="text-center mb-8">
-          <h2 className="text-2xl font-bold text-gray-900">Choose a dashboard</h2>
-          <p className="mt-2 text-sm text-gray-500">Pick a pre-built view for your role, or build a custom one with AI</p>
+          <h2 className="text-2xl font-bold text-slate-900">Choose a dashboard</h2>
+          <p className="mt-2 text-sm text-slate-500">Pick a pre-built view for your role, or build a custom one with AI</p>
         </div>
 
         <div className="grid grid-cols-3 gap-4 mb-8">
@@ -245,11 +245,11 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" d={card.icon} />
                   </svg>
                 </div>
-                <h3 className="text-sm font-semibold text-gray-900">{card.title}</h3>
-                <p className="mt-1 text-xs text-gray-500">{card.description}</p>
+                <h3 className="text-sm font-semibold text-slate-900">{card.title}</h3>
+                <p className="mt-1 text-xs text-slate-500">{card.description}</p>
                 <div className="mt-3 flex items-center gap-2">
-                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-gray-500 ring-1 ring-gray-200">{card.metrics}</span>
-                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-gray-500 ring-1 ring-gray-200">Real data</span>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-slate-500 ring-1 ring-slate-200/60">{card.metrics}</span>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-slate-500 ring-1 ring-slate-200/60">Real data</span>
                 </div>
               </button>
             );
@@ -257,22 +257,22 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
         </div>
 
         <div className="flex items-center gap-4 mb-8">
-          <div className="flex-1 border-t border-gray-200" />
-          <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">or</span>
-          <div className="flex-1 border-t border-gray-200" />
+          <div className="flex-1 border-t border-slate-200" />
+          <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">or</span>
+          <div className="flex-1 border-t border-slate-200" />
         </div>
 
         <div className="text-center">
           <button
             onClick={() => setMode('chat')}
-            className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-6 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 hover:border-gray-400"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:border-slate-400"
           >
             <svg className="h-4 w-4 text-indigo-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
             </svg>
             Build a custom dashboard with AI
           </button>
-          <p className="mt-2 text-xs text-gray-400">Describe your role and priorities in a conversation with Claude</p>
+          <p className="mt-2 text-xs text-slate-400">Describe your role and priorities in a conversation with Claude</p>
         </div>
       </div>
     );
@@ -290,10 +290,10 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
             &larr; Back to dashboard picker
           </button>
         </div>
-        <h2 className="text-xl font-semibold text-gray-900">
+        <h2 className="text-xl font-semibold text-slate-900">
           Build a custom dashboard
         </h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-slate-500">
           Tell me what you need to monitor and I&apos;ll personalize your view
         </p>
 
@@ -306,11 +306,11 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
 
           return (
             <div className="mt-3">
-              <div className="flex items-center justify-between text-xs text-gray-400">
+              <div className="flex items-center justify-between text-xs text-slate-400">
                 <span>{stepLabel}</span>
                 <span>{Math.round(progress)}%</span>
               </div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-100">
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-50">
                 <div
                   className="h-full rounded-full bg-indigo-500 transition-all duration-700 ease-out"
                   style={{ width: `${progress}%` }}
@@ -324,7 +324,7 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
       {/* Messages area */}
       <div
         ref={scrollRef}
-        className="flex-1 space-y-4 overflow-y-auto rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200"
+        className="flex-1 space-y-4 overflow-y-auto rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200/60"
       >
         {messages.map((msg, i) => (
           <div
@@ -335,7 +335,7 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
               className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                 msg.role === 'user'
                   ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 text-gray-800'
+                  : 'bg-slate-50 text-slate-800'
               }`}
             >
               {msg.text}
@@ -345,11 +345,11 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
 
         {isTyping && (
           <div className="flex justify-start">
-            <div className="rounded-2xl bg-gray-100 px-4 py-2.5">
+            <div className="rounded-2xl bg-slate-50 px-4 py-2.5">
               <span className="inline-flex gap-1">
-                <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '0ms' }} />
-                <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '150ms' }} />
-                <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '300ms' }} />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: '0ms' }} />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: '150ms' }} />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: '300ms' }} />
               </span>
             </div>
           </div>
@@ -357,7 +357,7 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
 
         {showExamples && !isTyping && messages.length > 0 && (
           <div className="space-y-2 px-2">
-            <p className="text-xs font-medium text-gray-400">Try an example:</p>
+            <p className="text-xs font-medium text-slate-400">Try an example:</p>
             <div className="flex flex-col gap-2">
               {EXAMPLE_PROMPTS.map((prompt, i) => (
                 <button
@@ -375,7 +375,7 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
         {isBuilding && (
           <div className="flex flex-col items-center gap-3 py-8">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
-            <p className="text-sm font-medium text-gray-600">
+            <p className="text-sm font-medium text-slate-600">
               Building your personalized dashboard...
             </p>
           </div>
@@ -392,7 +392,7 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
           onKeyDown={handleKeyDown}
           disabled={isTyping || isBuilding}
           placeholder={isBuilding ? 'Building your dashboard...' : 'Type your answer...'}
-          className="flex-1 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:bg-gray-50"
+          className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:bg-slate-50"
         />
         <button
           onClick={handleSend}

@@ -1,6 +1,6 @@
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 import type { MetricConfig, MetricValue } from 'shared/types';
-import { HealthBadge, getHealthStatus } from './HealthBadge';
+import { HealthBadge, getHealthStatus, STATUS_COLORS } from './HealthBadge';
 import { logInteraction } from '../../api/client';
 import { MetricTooltip } from './MetricTooltip';
 import { formatValue, formatDelta } from '../../lib/format';
@@ -42,53 +42,50 @@ export function MetricTile({ metric, value, userId, onClick }: MetricTileProps) 
     <MetricTooltip metric={metric}>
     <div
       onClick={handleClick}
-      className="cursor-pointer rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-200 transition hover:shadow-md"
+      className="metric-card cursor-pointer p-5"
     >
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
-          {metric.label}
-        </span>
-        <HealthBadge value={value.current} thresholds={metric.thresholds} />
-      </div>
+      <div className={`metric-card-accent ${STATUS_COLORS[status].accent}`} />
 
-      {/* Value */}
-      <div className="mt-3">
-        <span className="text-3xl font-bold text-gray-900">
-          {formatValue(value.current, metric.unit)}
-        </span>
-      </div>
-
-      {/* Delta */}
-      <div className="mt-1">
-        <span className={`text-sm font-medium ${deltaColor}`}>
-          {formatDelta(value.delta)}
-        </span>
-      </div>
-
-      {/* Sparkline */}
-      {sparkData.length > 1 && (
-        <div className="mt-3 h-12">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={sparkData}>
-              <defs>
-                <linearGradient id={`fill-${metric.id}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={strokeColor} stopOpacity={0.2} />
-                  <stop offset="100%" stopColor={strokeColor} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <Area
-                type="monotone"
-                dataKey="v"
-                stroke={strokeColor}
-                strokeWidth={1.5}
-                fill={`url(#fill-${metric.id})`}
-                isAnimationActive={false}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+      <div className="pl-3">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            {metric.label}
+          </span>
+          <HealthBadge value={value.current} thresholds={metric.thresholds} />
         </div>
-      )}
+
+        <div className="mt-3 flex items-baseline gap-3">
+          <span className="text-3xl font-bold tracking-tight text-slate-900">
+            {formatValue(value.current, metric.unit)}
+          </span>
+          <span className={`flex items-center gap-0.5 text-sm font-semibold ${deltaColor}`}>
+            {formatDelta(value.delta)}
+          </span>
+        </div>
+
+        {sparkData.length > 1 && (
+          <div className="mt-3 h-12">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={sparkData}>
+                <defs>
+                  <linearGradient id={`fill-${metric.id}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={strokeColor} stopOpacity={0.15} />
+                    <stop offset="100%" stopColor={strokeColor} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <Area
+                  type="monotone"
+                  dataKey="v"
+                  stroke={strokeColor}
+                  strokeWidth={1.5}
+                  fill={`url(#fill-${metric.id})`}
+                  isAnimationActive={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
     </div>
     </MetricTooltip>
   );

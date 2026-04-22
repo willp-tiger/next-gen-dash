@@ -48,11 +48,11 @@ const TABS: { key: AppTab; label: string; icon: React.ReactNode }[] = [
 
 export function Header({ activeTab, onTabChange, dashboardPhase, onReset }: HeaderProps) {
   return (
-    <header className="border-b border-gray-200 bg-white">
+    <header className="border-b border-slate-200/80 bg-white/95 backdrop-blur-sm sticky top-0 z-30">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-indigo-700 shadow-sm shadow-indigo-600/25">
               <svg
                 className="h-5 w-5 text-white"
                 fill="none"
@@ -67,32 +67,35 @@ export function Header({ activeTab, onTabChange, dashboardPhase, onReset }: Head
                 />
               </svg>
             </div>
-            <h1 className="text-lg font-semibold text-gray-900">
-              Sales Analytics Platform
-            </h1>
-            <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold text-indigo-600 uppercase tracking-wider">Enterprise</span>
+            <div className="flex items-baseline gap-2">
+              <h1 className="text-lg font-bold tracking-tight text-slate-900">
+                Sales Analytics
+              </h1>
+              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[9px] font-bold text-indigo-600 uppercase tracking-widest ring-1 ring-indigo-600/10">
+                Enterprise
+              </span>
+            </div>
           </div>
 
           {activeTab === 'dashboard' && dashboardPhase !== 'onboarding' && (
             <button
               onClick={onReset}
-              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:border-slate-300"
             >
               Start Over
             </button>
           )}
         </div>
 
-        {/* Tab navigation */}
         <nav className="-mb-px flex gap-1">
           {TABS.map(tab => (
             <button
               key={tab.key}
               onClick={() => onTabChange(tab.key)}
-              className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition ${
+              className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
                 activeTab === tab.key
                   ? 'border-indigo-600 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
               }`}
             >
               {tab.icon}

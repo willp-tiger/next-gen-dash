@@ -4,7 +4,9 @@
 
 @layer base {
   body {
-    @apply min-h-screen;
+    @apply min-h-screen font-sans;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
@@ -62,19 +64,38 @@
   .animate-tile-exit {
     animation: tile-exit 0.3s ease-in forwards;
   }
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .animate-fade-in {
+    animation: fade-in 0.5s ease-out;
+  }
 }
 
 @layer components {
   .health-badge {
-    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium;
   }
   .health-badge-healthy {
-    @apply bg-emerald-100 text-emerald-800;
+    @apply bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/10;
   }
   .health-badge-warning {
-    @apply bg-amber-100 text-amber-800;
+    @apply bg-amber-50 text-amber-700 ring-1 ring-amber-600/10;
   }
   .health-badge-critical {
-    @apply bg-red-100 text-red-800;
+    @apply bg-red-50 text-red-700 ring-1 ring-red-600/10;
+  }
+
+  .metric-card {
+    @apply relative overflow-hidden rounded-xl bg-white border border-slate-200/60 shadow-sm transition-all duration-200;
+  }
+  .metric-card:hover {
+    @apply shadow-md border-slate-300/60;
+  }
+
+  .metric-card-accent {
+    @apply absolute left-0 top-0 bottom-0 w-1 rounded-l-xl;
   }
 }

@@ -39,9 +39,9 @@ export function PersonaSelector({ onSelect, activePersona }: PersonaSelectorProp
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm transition hover:bg-gray-50 hover:text-gray-900"
+        className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:border-slate-300"
       >
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
         </svg>
         Compare Personas
@@ -51,8 +51,8 @@ export function PersonaSelector({ onSelect, activePersona }: PersonaSelectorProp
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full z-40 mt-2 w-72 rounded-xl bg-white p-2 shadow-xl ring-1 ring-gray-200">
-          <p className="px-3 py-2 text-xs font-medium text-gray-400">
+        <div className="absolute right-0 top-full z-40 mt-2 w-72 rounded-xl bg-white p-2 shadow-xl shadow-slate-900/10 border border-slate-200/60">
+          <p className="px-3 py-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
             See how different roles view the same data
           </p>
           {Object.entries(PERSONA_META).map(([key, meta]) => (
@@ -65,21 +65,21 @@ export function PersonaSelector({ onSelect, activePersona }: PersonaSelectorProp
               className={`flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition ${
                 activePersona === key
                   ? 'bg-indigo-50 ring-1 ring-indigo-200'
-                  : 'hover:bg-gray-50'
+                  : 'hover:bg-slate-50'
               }`}
             >
               <div className={`mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${
-                activePersona === key ? 'bg-indigo-100' : 'bg-gray-100'
+                activePersona === key ? 'bg-indigo-100' : 'bg-slate-100'
               }`}>
-                <svg className={`h-4 w-4 ${activePersona === key ? 'text-indigo-600' : 'text-gray-500'}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <svg className={`h-4 w-4 ${activePersona === key ? 'text-indigo-600' : 'text-slate-500'}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d={meta.icon} />
                 </svg>
               </div>
               <div>
-                <p className={`text-sm font-medium ${activePersona === key ? 'text-indigo-900' : 'text-gray-900'}`}>
+                <p className={`text-sm font-semibold ${activePersona === key ? 'text-indigo-900' : 'text-slate-900'}`}>
                   {meta.label}
                 </p>
-                <p className="text-xs text-gray-500">{meta.description}</p>
+                <p className="text-xs text-slate-500">{meta.description}</p>
               </div>
             </button>
           ))}
@@ -89,7 +89,7 @@ export function PersonaSelector({ onSelect, activePersona }: PersonaSelectorProp
                 onSelect(null as unknown as DashboardConfig);
                 setIsOpen(false);
               }}
-              className="mt-1 w-full rounded-lg px-3 py-2 text-center text-xs font-medium text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
+              className="mt-1 w-full rounded-lg px-3 py-2 text-center text-xs font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
             >
               Back to My View
             </button>

@@ -90,7 +90,7 @@ export function RefinementBanner({ userId, onAccept }: RefinementBannerProps) {
           </button>
           <button
             onClick={handleDismiss}
-            className="rounded-lg bg-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-300"
+            className="rounded-lg bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-300"
           >
             Not now
           </button>

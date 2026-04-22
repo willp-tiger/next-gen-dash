@@ -78,14 +78,14 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
   const actionBadge = (action: string | null | undefined) => {
     if (!action) return null;
     const colors: Record<string, string> = {
-      add: 'bg-emerald-100 text-emerald-700',
-      remove: 'bg-red-100 text-red-700',
-      edit: 'bg-amber-100 text-amber-700',
-      filter: 'bg-blue-100 text-blue-700',
-      author: 'bg-indigo-100 text-indigo-700',
+      add: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/10',
+      remove: 'bg-red-50 text-red-700 ring-1 ring-red-600/10',
+      edit: 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/10',
+      filter: 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/10',
+      author: 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-600/10',
     };
     return (
-      <span className={`ml-2 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${colors[action] || 'bg-gray-100 text-gray-700'}`}>
+      <span className={`ml-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${colors[action] || 'bg-slate-100 text-slate-700'}`}>
         {action}
       </span>
     );
@@ -96,7 +96,7 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
       {/* Toggle button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 transition-all duration-200 hover:bg-indigo-700 hover:shadow-xl hover:shadow-indigo-600/30 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
         title="Modify dashboard"
       >
         {isOpen ? (
@@ -112,25 +112,25 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
 
       {/* Chat panel */}
       {isOpen && (
-        <div className="fixed bottom-24 right-6 z-50 flex w-96 flex-col rounded-2xl bg-white shadow-2xl ring-1 ring-gray-200" style={{ height: '480px' }}>
+        <div className="fixed bottom-24 right-6 z-50 flex w-[400px] flex-col rounded-2xl bg-white shadow-2xl shadow-slate-900/10 border border-slate-200/60" style={{ height: '500px' }}>
           {/* Header */}
-          <div className="flex items-center justify-between rounded-t-2xl border-b bg-indigo-600 px-4 py-3">
+          <div className="flex items-center justify-between rounded-t-2xl bg-gradient-to-r from-indigo-600 to-indigo-700 px-5 py-3.5">
             <div>
-              <h3 className="text-sm font-semibold text-white">Dashboard Assistant</h3>
-              <p className="text-xs text-indigo-200">Add, edit, or remove metrics</p>
+              <h3 className="text-sm font-bold text-white">Dashboard Assistant</h3>
+              <p className="text-[11px] text-indigo-200/80">Add, edit, or remove metrics</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <button
                 onClick={async () => {
                   await resetDashboardChat(userId).catch(() => {});
                   setMessages([{ role: 'assistant', text: 'Conversation reset. How can I help?' }]);
                 }}
-                className="text-xs text-indigo-200 hover:text-white"
+                className="text-[11px] font-medium text-indigo-200/80 hover:text-white transition"
                 title="Reset conversation"
               >
                 Reset
               </button>
-              <button onClick={() => setIsOpen(false)} className="text-indigo-200 hover:text-white">
+              <button onClick={() => setIsOpen(false)} className="text-indigo-200/80 hover:text-white transition">
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -142,10 +142,10 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
+                <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                   msg.role === 'user'
                     ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-100 text-gray-800'
+                    : 'bg-slate-50 text-slate-800 ring-1 ring-slate-200/60'
                 }`}>
                   {msg.text}
                   {msg.role === 'assistant' && actionBadge(msg.action)}
@@ -153,7 +153,7 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
                     <div className="mt-2">
                       <button
                         onClick={() => onAuthorKpi(msg.authorPhrase as string)}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-indigo-700"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700"
                       >
                         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
@@ -167,11 +167,11 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
             ))}
             {isLoading && (
               <div className="flex justify-start">
-                <div className="rounded-2xl bg-gray-100 px-3.5 py-2">
+                <div className="rounded-2xl bg-slate-50 px-4 py-2.5 ring-1 ring-slate-200/60">
                   <span className="inline-flex gap-1">
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '0ms' }} />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '150ms' }} />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '300ms' }} />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: '0ms' }} />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: '150ms' }} />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: '300ms' }} />
                   </span>
                 </div>
               </div>
@@ -179,7 +179,7 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
           </div>
 
           {/* Input */}
-          <div className="border-t p-3">
+          <div className="border-t border-slate-100 p-3">
             <div className="flex gap-2">
               <input
                 ref={inputRef}
@@ -188,13 +188,13 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 disabled={isLoading}
-                placeholder="e.g., Filter to Classic Cars in Q1 2004"
-                className="flex-1 rounded-xl border border-gray-300 px-3 py-2 text-sm placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 disabled:bg-gray-50"
+                placeholder="e.g., Add a revenue breakdown by territory"
+                className="flex-1 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 disabled:bg-slate-50 transition"
               />
               <button
                 onClick={handleSend}
                 disabled={!input.trim() || isLoading}
-                className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-40"
               >
                 Send
               </button>

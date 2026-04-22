@@ -38,36 +38,35 @@ export function MetricTooltip({ metric, children }: MetricTooltipProps) {
       {children}
       {show && (
         <div className="absolute left-1/2 top-0 z-50 w-72 -translate-x-1/2 -translate-y-full pb-2">
-          <div className="rounded-xl bg-gray-900 px-4 py-3 text-xs text-white shadow-xl">
-            <p className="font-medium">{metric.label}</p>
-            <p className="mt-1 text-gray-300">{description}</p>
+          <div className="rounded-xl bg-slate-900 px-4 py-3 text-xs text-white shadow-xl">
+            <p className="font-semibold">{metric.label}</p>
+            <p className="mt-1 text-slate-300 leading-relaxed">{description}</p>
 
-            <div className="mt-2 flex items-center gap-3 border-t border-gray-700 pt-2">
-              <div className="flex items-center gap-1">
+            <div className="mt-2.5 flex items-center gap-3 border-t border-slate-700 pt-2.5">
+              <div className="flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                <span className="text-gray-400">&le; {metric.thresholds.green.max}</span>
+                <span className="text-slate-400">&le; {metric.thresholds.green.max}</span>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-amber-400" />
-                <span className="text-gray-400">&le; {metric.thresholds.yellow.max}</span>
+                <span className="text-slate-400">&le; {metric.thresholds.yellow.max}</span>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-red-400" />
-                <span className="text-gray-400">above</span>
+                <span className="text-slate-400">above</span>
               </div>
             </div>
 
-            <p className="mt-1 text-gray-500">{directionLabel}</p>
+            <p className="mt-1.5 text-[10px] font-medium text-slate-500 uppercase tracking-wider">{directionLabel}</p>
 
             {metric.reasoning && (
-              <p className="mt-2 border-t border-gray-700 pt-2 italic text-indigo-300">
+              <p className="mt-2 border-t border-slate-700 pt-2 italic text-indigo-300">
                 &ldquo;{metric.reasoning}&rdquo;
               </p>
             )}
 
-            {/* Arrow */}
             <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-[2px]">
-              <div className="h-2 w-2 rotate-45 bg-gray-900" />
+              <div className="h-2 w-2 rotate-45 bg-slate-900" />
             </div>
           </div>
         </div>

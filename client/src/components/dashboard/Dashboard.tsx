@@ -36,17 +36,15 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<FilterState>({});
   const [showFilters, setShowFilters] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
-  // Track previous metric IDs for animation
   const prevMetricIds = useRef<Set<string>>(new Set());
   const [animatedIds, setAnimatedIds] = useState<Set<string>>(new Set());
 
-  // Debounced PUT so rapid filter edits (typing into date inputs) don't hammer the server
   const persistTimer = useRef<number | null>(null);
   const handleFilterChange = (next: FilterState) => {
     setFilters(next);
     setActiveConfig(prev => ({ ...prev, globalFilters: next }));
-    // Only persist the real user's config, not canonical or persona views
     if (isCanonical || activePersona) return;
     if (persistTimer.current) window.clearTimeout(persistTimer.current);
     persistTimer.current = window.setTimeout(() => {
@@ -58,7 +56,6 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
     }, 400);
   };
 
-  // Detect new/changed metrics and animate them
   useEffect(() => {
     const currentIds = new Set(activeConfig.metrics.filter(m => m.visible).map(m => m.id));
     const newIds = new Set<string>();
@@ -75,7 +72,6 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
     prevMetricIds.current = currentIds;
   }, [activeConfig.metrics]);
 
-  // Keep user config in sync with prop
   useEffect(() => {
     if (!isCanonical) {
       setActiveConfig(config);
@@ -83,7 +79,6 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
     }
   }, [config, isCanonical]);
 
-  // Show filter bar when any metric has a filter or breakdown or a global filter is set
   useEffect(() => {
     const hasBreakdown = activeConfig.metrics.some(m => m.chartType === 'breakdown' || m.chartType === 'heatmap' || m.filterBy);
     const hasGlobal = !!(activeConfig.globalFilters && Object.keys(activeConfig.globalFilters).length > 0);
@@ -97,6 +92,7 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
         .map((m) => m.id);
       const data = await getMetrics(ids, filters);
       setSnapshot(data);
+      setLastRefresh(new Date());
     } catch {
       // ignore fetch errors
     } finally {
@@ -104,7 +100,6 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
     }
   }, [activeConfig.metrics, filters]);
 
-  // Initial fetch + auto-refresh every 10s
   useEffect(() => {
     setLoading(true);
     fetchMetrics();
@@ -112,7 +107,6 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
     return () => clearInterval(interval);
   }, [fetchMetrics]);
 
-  // Toggle canonical view
   const handleToggle = async (canonical: boolean) => {
     setIsCanonical(canonical);
     setActivePersona(null);
@@ -135,7 +129,6 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
       setActiveConfig(config);
       return;
     }
-    // Determine persona key from userId
     const key = personaConfig.userId.replace('persona-', '');
     setActivePersona(key);
     setIsCanonical(false);
@@ -177,7 +170,6 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
 
   const handleConfigUpdate = (newConfig: DashboardConfig) => {
     setActiveConfig(newConfig);
-    // Prefer global filters from chat; fall back to breakdown's filterBy
     if (newConfig.globalFilters !== undefined) {
       setFilters(newConfig.globalFilters || {});
       setShowFilters(true);
@@ -193,7 +185,6 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
     }
   };
 
-  // Apply global filters to breakdown/heatmap metrics
   const applyGlobalFilters = (metric: MetricConfig): MetricConfig => {
     if (metric.chartType === 'breakdown' || metric.chartType === 'heatmap') {
       return { ...metric, filterBy: { ...metric.filterBy, ...filters } };
@@ -209,31 +200,72 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
   const breakdownMetrics = visibleMetrics.filter(m => m.chartType === 'breakdown' || m.chartType === 'heatmap');
 
   const cols = activeConfig.layout?.columns ?? 3;
-  const gridClass = `grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-${cols} lg:grid-cols-${cols}`;
+  const gridClass = `grid gap-5 grid-cols-1 sm:grid-cols-2 md:grid-cols-${cols} lg:grid-cols-${cols}`;
+
+  const refreshAgo = () => {
+    const seconds = Math.floor((Date.now() - lastRefresh.getTime()) / 1000);
+    if (seconds < 5) return 'Just now';
+    if (seconds < 60) return `${seconds}s ago`;
+    return `${Math.floor(seconds / 60)}m ago`;
+  };
 
   return (
-    <div className="space-y-4">
-      {/* Top bar */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">
-            {activePersona
-              ? `${activePersona.charAt(0).toUpperCase() + activePersona.slice(1)} View`
-              : 'Dashboard'}
-          </h2>
-          {activePersona && (
-            <p className="text-xs text-gray-500">{activeConfig.interpretation.summary}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <PersonaSelector onSelect={handlePersonaSelect} activePersona={activePersona} />
-          {activeConfig.layout?.showCanonicalToggle !== false && (
-            <ViewToggle isCanonical={isCanonical} onToggle={handleToggle} />
-          )}
+    <div className="space-y-5 animate-fade-in">
+      {/* Dashboard header */}
+      <div className="rounded-xl bg-white border border-slate-200/60 shadow-sm p-5">
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-bold tracking-tight text-slate-900">
+                {activePersona
+                  ? `${activePersona.charAt(0).toUpperCase() + activePersona.slice(1)} View`
+                  : 'My Dashboard'}
+              </h2>
+              {!isCanonical && !activePersona && (
+                <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-[10px] font-bold text-indigo-600 ring-1 ring-indigo-600/10 uppercase tracking-wider">
+                  Personalized
+                </span>
+              )}
+              {isCanonical && (
+                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-600 ring-1 ring-slate-600/10 uppercase tracking-wider">
+                  Standard
+                </span>
+              )}
+            </div>
+            <p className="mt-1.5 text-sm text-slate-500 max-w-2xl leading-relaxed">
+              {activeConfig.interpretation.summary}
+            </p>
+            <div className="mt-3 flex items-center gap-4 text-xs text-slate-400">
+              <span className="flex items-center gap-1.5">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6z" />
+                </svg>
+                <span className="font-medium">{visibleMetrics.length} metrics</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="font-medium">Updated {refreshAgo()}</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                </svg>
+                <span className="font-medium">{cols}-column layout</span>
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 ml-4">
+            <PersonaSelector onSelect={handlePersonaSelect} activePersona={activePersona} />
+            {activeConfig.layout?.showCanonicalToggle !== false && (
+              <ViewToggle isCanonical={isCanonical} onToggle={handleToggle} />
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Filter bar - shown when breakdown charts exist */}
+      {/* Filter bar */}
       {showFilters && (
         <FilterBar filters={filters} onFilterChange={handleFilterChange} />
       )}
@@ -292,9 +324,12 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
       {/* Breakdown charts section */}
       {breakdownMetrics.length > 0 && (
         <div>
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-500">
-            Breakdowns
-          </h3>
+          <div className="flex items-center gap-3 mb-4">
+            <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Breakdowns
+            </h3>
+            <div className="flex-1 border-t border-slate-200" />
+          </div>
           <div className={gridClass}>
             {breakdownMetrics.map((metric) => {
               const filtered = applyGlobalFilters(metric);
@@ -312,7 +347,7 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
         </div>
       )}
 
-      {/* Dashboard chat for modifying KPIs */}
+      {/* Dashboard chat */}
       <DashboardChat
         userId={userId}
         onConfigUpdate={handleConfigUpdate}

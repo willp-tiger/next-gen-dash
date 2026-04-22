@@ -100,7 +100,7 @@ function AssertionTypeIcon({ type }: { type: string }) {
     custom_sql: '{}',
   };
   return (
-    <span className="flex h-6 w-6 items-center justify-center rounded bg-gray-100 text-xs font-bold text-gray-500">
+    <span className="flex h-6 w-6 items-center justify-center rounded bg-slate-100 text-xs font-bold text-slate-500">
       {icons[type] ?? '?'}
     </span>
   );
@@ -141,8 +141,8 @@ export function KpiHealth() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">KPI Health Monitor</h2>
-        <p className="mt-1 text-sm text-gray-500">Automated test assertions track the health of every published KPI. Runs daily via Databricks Jobs.</p>
+        <h2 className="text-2xl font-bold text-slate-900">KPI Health Monitor</h2>
+        <p className="mt-1 text-sm text-slate-500">Automated test assertions track the health of every published KPI. Runs daily via Databricks Jobs.</p>
       </div>
 
       {/* Overall health banner */}
@@ -166,27 +166,27 @@ export function KpiHealth() {
               }`}>
                 {overallHealth === 'pass' ? 'All Systems Healthy' : overallHealth === 'warn' ? 'Warnings Detected' : 'Failures Detected'}
               </div>
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-slate-500">
                 Last sweep: {new Date().toLocaleDateString()} 06:00 UTC via Databricks Jobs
               </div>
             </div>
           </div>
           <div className="flex gap-6 text-center">
             <div>
-              <div className="text-2xl font-bold text-gray-900">{totalAssertions}</div>
-              <div className="text-xs text-gray-500">Total Tests</div>
+              <div className="text-2xl font-bold text-slate-900">{totalAssertions}</div>
+              <div className="text-xs text-slate-500">Total Tests</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-emerald-600">{totalPassing}</div>
-              <div className="text-xs text-gray-500">Passing</div>
+              <div className="text-xs text-slate-500">Passing</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-amber-600">{totalWarning}</div>
-              <div className="text-xs text-gray-500">Warnings</div>
+              <div className="text-xs text-slate-500">Warnings</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-red-600">{totalFailing}</div>
-              <div className="text-xs text-gray-500">Failures</div>
+              <div className="text-xs text-slate-500">Failures</div>
             </div>
           </div>
         </div>
@@ -204,7 +204,7 @@ export function KpiHealth() {
             key={f.key}
             onClick={() => setFilter(f.key)}
             className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-              filter === f.key ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+              filter === f.key ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
             }`}
           >
             {f.label}
@@ -217,41 +217,41 @@ export function KpiHealth() {
         {filtered.map(s => {
           const isExpanded = expandedKpi === s.kpiId;
           return (
-            <div key={s.kpiId} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+            <div key={s.kpiId} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
               <button
                 onClick={() => setExpandedKpi(isExpanded ? null : s.kpiId)}
-                className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition"
+                className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-50 transition"
               >
                 <div className="flex items-center gap-4">
                   <span className={`h-3 w-3 rounded-full flex-shrink-0 ${
-                    s.overallStatus === 'pass' ? 'bg-emerald-400' : s.overallStatus === 'warn' ? 'bg-amber-400' : s.overallStatus === 'fail' ? 'bg-red-400' : 'bg-gray-300'
+                    s.overallStatus === 'pass' ? 'bg-emerald-400' : s.overallStatus === 'warn' ? 'bg-amber-400' : s.overallStatus === 'fail' ? 'bg-red-400' : 'bg-slate-300'
                   }`} />
                   <div>
-                    <div className="text-sm font-semibold text-gray-900">{s.displayName}</div>
-                    <div className="text-xs text-gray-400 font-mono">{s.kpiId}</div>
+                    <div className="text-sm font-semibold text-slate-900">{s.displayName}</div>
+                    <div className="text-xs text-slate-400 font-mono">{s.kpiId}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
-                  <span className="text-xs text-gray-400">Owner: {s.owner}</span>
+                  <span className="text-xs text-slate-400">Owner: {s.owner}</span>
                   <div className="flex items-center gap-3 text-xs">
                     <span className="text-emerald-600 font-medium">{s.passing} pass</span>
                     <span className="text-amber-600 font-medium">{s.warnings} warn</span>
                     <span className="text-red-600 font-medium">{s.failures} fail</span>
                   </div>
-                  <svg className={`h-4 w-4 text-gray-400 transition ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <svg className={`h-4 w-4 text-slate-400 transition ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                   </svg>
                 </div>
               </button>
               {isExpanded && (
-                <div className="border-t border-gray-100 px-5 py-3 space-y-2">
+                <div className="border-t border-slate-100 px-5 py-3 space-y-2">
                   {s.assertions.map(a => (
-                    <div key={a.assertionId} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-4 py-2.5">
+                    <div key={a.assertionId} className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-4 py-2.5">
                       <div className="flex items-center gap-3">
                         <AssertionTypeIcon type={a.assertionType} />
                         <div>
-                          <div className="text-sm text-gray-700">{a.description}</div>
-                          <div className="text-xs text-gray-400 font-mono">{a.assertionType} \u00B7 severity: {a.severity}</div>
+                          <div className="text-sm text-slate-700">{a.description}</div>
+                          <div className="text-xs text-slate-400 font-mono">{a.assertionType} \u00B7 severity: {a.severity}</div>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
@@ -260,12 +260,12 @@ export function KpiHealth() {
                         }`}>
                           {a.lastResult.toUpperCase()}
                         </span>
-                        <span className="text-xs text-gray-400">{new Date(a.lastRunAt).toLocaleString()}</span>
+                        <span className="text-xs text-slate-400">{new Date(a.lastRunAt).toLocaleString()}</span>
                       </div>
                     </div>
                   ))}
                   {s.assertions.length === 0 && (
-                    <p className="text-sm text-gray-400 py-2">No test assertions defined for this KPI.</p>
+                    <p className="text-sm text-slate-400 py-2">No test assertions defined for this KPI.</p>
                   )}
                 </div>
               )}

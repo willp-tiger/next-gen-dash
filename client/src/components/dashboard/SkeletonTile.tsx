@@ -1,33 +1,31 @@
 export function SkeletonTile({ variant = 'number' }: { variant?: 'number' | 'chart' | 'gauge' }) {
   return (
-    <div className="animate-pulse rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="h-3 w-24 rounded bg-gray-200" />
-        <div className="h-5 w-16 rounded-full bg-gray-200" />
-      </div>
-
-      {/* Value */}
-      <div className="mt-4 flex items-baseline gap-2">
-        <div className="h-8 w-20 rounded bg-gray-200" />
-        <div className="h-4 w-10 rounded bg-gray-100" />
-      </div>
-
-      {/* Delta */}
-      <div className="mt-2 h-4 w-16 rounded bg-gray-100" />
-
-      {/* Chart area */}
-      {variant === 'chart' && (
-        <div className="mt-3 h-[160px] rounded bg-gray-100" />
-      )}
-      {variant === 'gauge' && (
-        <div className="mt-3 flex justify-center">
-          <div className="h-[70px] w-[120px] rounded-t-full bg-gray-100" />
+    <div className="animate-pulse metric-card p-5">
+      <div className="pl-3">
+        <div className="flex items-center justify-between">
+          <div className="h-3 w-24 rounded bg-slate-200" />
+          <div className="h-5 w-16 rounded-full bg-slate-100" />
         </div>
-      )}
-      {variant === 'number' && (
-        <div className="mt-3 h-12 rounded bg-gray-100" />
-      )}
+
+        <div className="mt-4 flex items-baseline gap-2">
+          <div className="h-8 w-20 rounded bg-slate-200" />
+          <div className="h-4 w-10 rounded bg-slate-100" />
+        </div>
+
+        <div className="mt-2 h-4 w-16 rounded bg-slate-100" />
+
+        {variant === 'chart' && (
+          <div className="mt-3 h-[160px] rounded-lg bg-slate-100" />
+        )}
+        {variant === 'gauge' && (
+          <div className="mt-3 flex justify-center">
+            <div className="h-[70px] w-[120px] rounded-t-full bg-slate-100" />
+          </div>
+        )}
+        {variant === 'number' && (
+          <div className="mt-3 h-12 rounded-lg bg-slate-100" />
+        )}
+      </div>
     </div>
   );
 }
@@ -39,7 +37,7 @@ export function SkeletonGrid({ columns = 3, count = 6 }: { columns?: number; cou
   }
 
   return (
-    <div className={`grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-${columns} lg:grid-cols-${columns}`}>
+    <div className={`grid gap-5 grid-cols-1 sm:grid-cols-2 md:grid-cols-${columns} lg:grid-cols-${columns}`}>
       {variants.map((v, i) => (
         <SkeletonTile key={i} variant={v} />
       ))}

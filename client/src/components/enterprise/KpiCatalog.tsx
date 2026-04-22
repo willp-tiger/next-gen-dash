@@ -31,7 +31,7 @@ function publishedToKpiDefinition(p: PublishedKpi): KpiDefinition {
 const STATUS_STYLES: Record<string, string> = {
   published: 'bg-emerald-100 text-emerald-700',
   validated: 'bg-blue-100 text-blue-700',
-  draft: 'bg-gray-100 text-gray-600',
+  draft: 'bg-slate-100 text-slate-600',
   validating: 'bg-amber-100 text-amber-700',
   deprecated: 'bg-red-100 text-red-600',
 };
@@ -46,7 +46,7 @@ const STATUS_ICONS: Record<string, string> = {
 
 function StatusBadge({ status }: { status: string }) {
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLES[status] ?? 'bg-gray-100 text-gray-600'}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLES[status] ?? 'bg-slate-100 text-slate-600'}`}>
       <span className="text-[10px]">{STATUS_ICONS[status]}</span>
       {status}
     </span>
@@ -55,13 +55,13 @@ function StatusBadge({ status }: { status: string }) {
 
 function TestStatusDot({ kpiId }: { kpiId: string }) {
   const assertions = TEST_ASSERTIONS.filter(a => a.kpiId === kpiId);
-  if (assertions.length === 0) return <span className="text-xs text-gray-400">No tests</span>;
+  if (assertions.length === 0) return <span className="text-xs text-slate-400">No tests</span>;
   const hasFail = assertions.some(a => a.lastResult === 'fail');
   const hasWarn = assertions.some(a => a.lastResult === 'warn');
   const color = hasFail ? 'bg-red-400' : hasWarn ? 'bg-amber-400' : 'bg-emerald-400';
   const label = hasFail ? 'Failing' : hasWarn ? 'Warning' : 'Passing';
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-gray-600">
+    <span className="inline-flex items-center gap-1.5 text-xs text-slate-600">
       <span className={`h-2 w-2 rounded-full ${color}`} />
       {assertions.length} tests \u00B7 {label}
     </span>
@@ -77,15 +77,15 @@ function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => v
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-16" onClick={onClose}>
       <div className="w-full max-w-3xl rounded-xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-gray-200 px-6 py-4">
+        <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-gray-900">{kpi.displayName}</h2>
+              <h2 className="text-lg font-semibold text-slate-900">{kpi.displayName}</h2>
               <StatusBadge status={kpi.status} />
             </div>
-            <p className="mt-1 text-sm text-gray-500">{kpi.description}</p>
+            <p className="mt-1 text-sm text-slate-500">{kpi.description}</p>
           </div>
-          <button onClick={onClose} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+          <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -93,33 +93,33 @@ function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => v
         </div>
 
         {/* Metadata grid */}
-        <div className="grid grid-cols-4 gap-4 border-b border-gray-100 px-6 py-3 text-sm">
-          <div><span className="text-gray-400">Unit</span><div className="font-medium text-gray-700">{kpi.unit}</div></div>
-          <div><span className="text-gray-400">Direction</span><div className="font-medium text-gray-700">{kpi.direction}</div></div>
-          <div><span className="text-gray-400">Grain</span><div className="font-medium text-gray-700">{kpi.grain}</div></div>
-          <div><span className="text-gray-400">Materialization</span><div className="font-medium text-gray-700">{kpi.materialization}{kpi.schedule ? ` (${kpi.schedule})` : ''}</div></div>
-          <div><span className="text-gray-400">Owner</span><div className="font-medium text-gray-700">{kpi.owner}</div></div>
-          <div><span className="text-gray-400">Version</span><div className="font-medium text-gray-700">v{kpi.version}</div></div>
-          <div><span className="text-gray-400">Dimensions</span><div className="font-medium text-gray-700">{kpi.dimensions.join(', ')}</div></div>
-          <div><span className="text-gray-400">Thresholds</span><div className="font-medium text-gray-700">G: \u2264{kpi.defaultThresholds.greenMax} / Y: \u2264{kpi.defaultThresholds.yellowMax}</div></div>
+        <div className="grid grid-cols-4 gap-4 border-b border-slate-100 px-6 py-3 text-sm">
+          <div><span className="text-slate-400">Unit</span><div className="font-medium text-slate-700">{kpi.unit}</div></div>
+          <div><span className="text-slate-400">Direction</span><div className="font-medium text-slate-700">{kpi.direction}</div></div>
+          <div><span className="text-slate-400">Grain</span><div className="font-medium text-slate-700">{kpi.grain}</div></div>
+          <div><span className="text-slate-400">Materialization</span><div className="font-medium text-slate-700">{kpi.materialization}{kpi.schedule ? ` (${kpi.schedule})` : ''}</div></div>
+          <div><span className="text-slate-400">Owner</span><div className="font-medium text-slate-700">{kpi.owner}</div></div>
+          <div><span className="text-slate-400">Version</span><div className="font-medium text-slate-700">v{kpi.version}</div></div>
+          <div><span className="text-slate-400">Dimensions</span><div className="font-medium text-slate-700">{kpi.dimensions.join(', ')}</div></div>
+          <div><span className="text-slate-400">Thresholds</span><div className="font-medium text-slate-700">G: \u2264{kpi.defaultThresholds.greenMax} / Y: \u2264{kpi.defaultThresholds.yellowMax}</div></div>
         </div>
 
         {/* Source tables */}
-        <div className="border-b border-gray-100 px-6 py-2 text-sm">
-          <span className="text-gray-400">Source Tables: </span>
+        <div className="border-b border-slate-100 px-6 py-2 text-sm">
+          <span className="text-slate-400">Source Tables: </span>
           {kpi.sourceTables.map(t => (
             <span key={t} className="mr-2 inline-flex rounded bg-indigo-50 px-2 py-0.5 text-xs font-mono text-indigo-600">{t}</span>
           ))}
         </div>
 
         {/* Tabs */}
-        <div className="border-b border-gray-200 px-6">
+        <div className="border-b border-slate-200 px-6">
           <div className="flex gap-6">
             {(['sql', 'tests', 'versions'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`border-b-2 py-3 text-sm font-medium transition ${activeTab === tab ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                className={`border-b-2 py-3 text-sm font-medium transition ${activeTab === tab ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
               >
                 {tab === 'sql' ? 'SQL Logic' : tab === 'tests' ? `Tests (${assertions.length})` : `Versions (${versions.length})`}
               </button>
@@ -130,24 +130,24 @@ function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => v
         {/* Tab content */}
         <div className="max-h-80 overflow-auto px-6 py-4">
           {activeTab === 'sql' && (
-            <pre className="rounded-lg bg-gray-900 p-4 text-sm text-gray-100 overflow-x-auto">
+            <pre className="rounded-lg bg-slate-900 p-4 text-sm text-slate-100 overflow-x-auto">
               <code>{kpi.sqlLogic}</code>
             </pre>
           )}
 
           {activeTab === 'tests' && (
             <div className="space-y-2">
-              {assertions.length === 0 && <p className="text-sm text-gray-400">No test assertions defined.</p>}
+              {assertions.length === 0 && <p className="text-sm text-slate-400">No test assertions defined.</p>}
               {assertions.map(a => (
-                <div key={a.assertionId} className="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-2.5">
+                <div key={a.assertionId} className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-2.5">
                   <div className="flex items-center gap-3">
                     <span className={`h-2.5 w-2.5 rounded-full ${a.lastResult === 'pass' ? 'bg-emerald-400' : a.lastResult === 'warn' ? 'bg-amber-400' : 'bg-red-400'}`} />
                     <div>
-                      <div className="text-sm font-medium text-gray-700">{a.description}</div>
-                      <div className="text-xs text-gray-400">{a.assertionType} \u00B7 {a.severity}</div>
+                      <div className="text-sm font-medium text-slate-700">{a.description}</div>
+                      <div className="text-xs text-slate-400">{a.assertionType} \u00B7 {a.severity}</div>
                     </div>
                   </div>
-                  <div className="text-right text-xs text-gray-400">
+                  <div className="text-right text-xs text-slate-400">
                     <div className={`font-medium ${a.lastResult === 'pass' ? 'text-emerald-600' : a.lastResult === 'warn' ? 'text-amber-600' : 'text-red-600'}`}>
                       {a.lastResult.toUpperCase()}
                     </div>
@@ -160,20 +160,20 @@ function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => v
 
           {activeTab === 'versions' && (
             <div className="relative pl-6">
-              <div className="absolute left-2.5 top-0 bottom-0 w-px bg-gray-200" />
+              <div className="absolute left-2.5 top-0 bottom-0 w-px bg-slate-200" />
               {[...versions].reverse().map((v, i) => (
                 <div key={v.version} className="relative mb-4 last:mb-0">
-                  <div className={`absolute -left-[14px] top-1 h-3 w-3 rounded-full border-2 border-white ${i === 0 ? 'bg-indigo-500' : 'bg-gray-300'}`} />
-                  <div className="rounded-lg border border-gray-200 px-4 py-2.5">
+                  <div className={`absolute -left-[14px] top-1 h-3 w-3 rounded-full border-2 border-white ${i === 0 ? 'bg-indigo-500' : 'bg-slate-300'}`} />
+                  <div className="rounded-lg border border-slate-200 px-4 py-2.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-700">v{v.version}</span>
+                      <span className="text-sm font-medium text-slate-700">v{v.version}</span>
                       <div className="flex items-center gap-2">
                         <StatusBadge status={v.status} />
-                        <span className="text-xs text-gray-400">{new Date(v.createdAt).toLocaleDateString()}</span>
+                        <span className="text-xs text-slate-400">{new Date(v.createdAt).toLocaleDateString()}</span>
                       </div>
                     </div>
-                    <p className="mt-1 text-sm text-gray-500">{v.changeReason}</p>
-                    <p className="text-xs text-gray-400">by {v.createdBy}</p>
+                    <p className="mt-1 text-sm text-slate-500">{v.changeReason}</p>
+                    <p className="text-xs text-slate-400">by {v.createdBy}</p>
                   </div>
                 </div>
               ))}
@@ -182,8 +182,8 @@ function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => v
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end border-t border-gray-200 px-6 py-3">
-          <button onClick={onClose} className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200">Close</button>
+        <div className="flex justify-end border-t border-slate-200 px-6 py-3">
+          <button onClick={onClose} className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200">Close</button>
         </div>
       </div>
     </div>
@@ -229,8 +229,8 @@ export function KpiCatalog() {
     <div>
       {/* Page header */}
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">KPI Catalog</h2>
-        <p className="mt-1 text-sm text-gray-500">Browse, search, and inspect all registered KPI definitions in the semantic layer.</p>
+        <h2 className="text-2xl font-bold text-slate-900">KPI Catalog</h2>
+        <p className="mt-1 text-sm text-slate-500">Browse, search, and inspect all registered KPI definitions in the semantic layer.</p>
       </div>
 
       {/* Summary cards */}
@@ -239,10 +239,10 @@ export function KpiCatalog() {
           <button
             key={status}
             onClick={() => setStatusFilter(statusFilter === status ? 'all' : status)}
-            className={`rounded-lg border px-4 py-3 text-left transition ${statusFilter === status ? 'border-indigo-300 bg-indigo-50 ring-1 ring-indigo-200' : 'border-gray-200 bg-white hover:border-gray-300'}`}
+            className={`rounded-lg border px-4 py-3 text-left transition ${statusFilter === status ? 'border-indigo-300 bg-indigo-50 ring-1 ring-indigo-200' : 'border-slate-200 bg-white hover:border-slate-300'}`}
           >
-            <div className="text-2xl font-bold text-gray-900">{statusCounts[status] || 0}</div>
-            <div className="text-xs font-medium text-gray-500 capitalize">{status}</div>
+            <div className="text-2xl font-bold text-slate-900">{statusCounts[status] || 0}</div>
+            <div className="text-xs font-medium text-slate-500 capitalize">{status}</div>
           </button>
         ))}
       </div>
@@ -250,7 +250,7 @@ export function KpiCatalog() {
       {/* Search */}
       <div className="mb-4">
         <div className="relative">
-          <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+          <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
           </svg>
           <input
@@ -258,7 +258,7 @@ export function KpiCatalog() {
             placeholder="Search by name, description, or tag..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />
         </div>
       </div>
@@ -269,30 +269,30 @@ export function KpiCatalog() {
           <button
             key={kpi.kpiId}
             onClick={() => setSelectedKpi(kpi)}
-            className="w-full rounded-xl border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:border-indigo-200 hover:shadow-md"
+            className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-indigo-200 hover:shadow-md"
           >
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-900">{kpi.displayName}</span>
+                  <span className="font-semibold text-slate-900">{kpi.displayName}</span>
                   <StatusBadge status={kpi.status} />
-                  <span className="text-xs font-mono text-gray-400">v{kpi.version}</span>
+                  <span className="text-xs font-mono text-slate-400">v{kpi.version}</span>
                 </div>
-                <p className="mt-1 text-sm text-gray-500 truncate">{kpi.description}</p>
+                <p className="mt-1 text-sm text-slate-500 truncate">{kpi.description}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <span className="text-xs text-gray-400">
-                    <span className="font-mono text-gray-500">{kpi.kpiId}</span>
+                  <span className="text-xs text-slate-400">
+                    <span className="font-mono text-slate-500">{kpi.kpiId}</span>
                   </span>
-                  <span className="text-xs text-gray-400">{kpi.unit} \u00B7 {kpi.direction}</span>
-                  <span className="text-xs text-gray-400">{kpi.grain} \u00B7 {kpi.materialization}</span>
-                  <span className="text-xs text-gray-400">Owner: {kpi.owner}</span>
+                  <span className="text-xs text-slate-400">{kpi.unit} \u00B7 {kpi.direction}</span>
+                  <span className="text-xs text-slate-400">{kpi.grain} \u00B7 {kpi.materialization}</span>
+                  <span className="text-xs text-slate-400">Owner: {kpi.owner}</span>
                 </div>
               </div>
               <div className="ml-4 flex flex-col items-end gap-2">
                 <TestStatusDot kpiId={kpi.kpiId} />
                 <div className="flex gap-1">
                   {kpi.tags.slice(0, 3).map(t => (
-                    <span key={t} className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">{t}</span>
+                    <span key={t} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">{t}</span>
                   ))}
                 </div>
               </div>
@@ -300,7 +300,7 @@ export function KpiCatalog() {
           </button>
         ))}
         {filtered.length === 0 && (
-          <div className="py-12 text-center text-sm text-gray-400">No KPIs match your search.</div>
+          <div className="py-12 text-center text-sm text-slate-400">No KPIs match your search.</div>
         )}
       </div>
 
