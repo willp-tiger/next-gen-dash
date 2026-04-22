@@ -242,6 +242,48 @@ export function getPublishedKpis() {
   return fetchJson<{ kpis: PublishedKpi[] }>('/kpis/published');
 }
 
+export interface AssertionResult {
+  assertionId: string;
+  kpiId: string;
+  assertionType: 'range_check' | 'not_null' | 'freshness' | 'row_count' | 'delta_check';
+  severity: 'warn' | 'fail';
+  description: string;
+  lastRunAt: string;
+  lastResult: 'pass' | 'warn' | 'fail';
+  message: string;
+  durationMs: number;
+}
+
+export interface KpiHealthSummary {
+  kpiId: string;
+  displayName: string;
+  owner: string;
+  assertions: AssertionResult[];
+  totalTests: number;
+  passing: number;
+  warnings: number;
+  failures: number;
+  overallStatus: 'pass' | 'warn' | 'fail' | 'none';
+  lastRunAt: string;
+}
+
+export interface HealthSnapshot {
+  runAt: string;
+  summaries: KpiHealthSummary[];
+  totalAssertions: number;
+  totalPassing: number;
+  totalWarnings: number;
+  totalFailures: number;
+}
+
+export function getKpiHealth() {
+  return fetchJson<HealthSnapshot>('/kpis/health');
+}
+
+export function runKpiHealth() {
+  return fetchJson<HealthSnapshot>('/kpis/health/run', { method: 'POST' });
+}
+
 export function login(email: string, password: string) {
   return fetchJson<AuthResponse>('/auth/login', {
     method: 'POST',

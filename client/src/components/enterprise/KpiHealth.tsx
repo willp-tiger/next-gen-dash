@@ -1,94 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
-import { KPI_REGISTRY, TEST_ASSERTIONS } from '../../data/kpiRegistry';
-import type { KpiDefinition, TestAssertion } from '../../data/kpiRegistry';
-import { getPublishedKpis } from '../../api/client';
-import type { PublishedKpi } from '../../api/client';
-
-function publishedToKpiDefinition(p: PublishedKpi): KpiDefinition {
-  return {
-    kpiId: p.kpiId,
-    version: p.version,
-    displayName: p.displayName,
-    description: p.description,
-    unit: p.unit,
-    direction: p.direction,
-    sqlLogic: p.sqlLogic,
-    sourceTables: ['production.sales.sales_orders'],
-    grain: p.grain,
-    dimensions: p.dimensions,
-    defaultThresholds: p.thresholds,
-    materialization: 'live',
-    schedule: null,
-    owner: p.createdBy,
-    status: 'published',
-    createdAt: p.createdAt,
-    createdBy: p.createdBy,
-    changeReason: 'Published from KPI Authoring Studio',
-    tags: ['studio-authored'],
-  };
-}
-
-// Synthesize a single passing "freshness" assertion for a newly-published KPI
-// so the Health tab shows it alongside the static registry.
-function syntheticAssertions(p: PublishedKpi): TestAssertion[] {
-  return [{
-    assertionId: `${p.kpiId}-auto`,
-    kpiId: p.kpiId,
-    assertionType: 'freshness',
-    assertionSql: '-- auto-synthesized for studio-authored KPI',
-    severity: 'warn',
-    description: 'SQL executed and returned a numeric value at publish time',
-    lastRunAt: p.createdAt,
-    lastResult: 'pass',
-  }];
-}
+import { useEffect, useState, useCallback } from 'react';
+import { getKpiHealth, runKpiHealth } from '../../api/client';
+import type { HealthSnapshot, KpiHealthSummary, AssertionResult } from '../../api/client';
 
 type HealthFilter = 'all' | 'passing' | 'warning' | 'failing';
-
-interface KpiHealthSummary {
-  kpiId: string;
-  displayName: string;
-  owner: string;
-  totalTests: number;
-  passing: number;
-  warnings: number;
-  failures: number;
-  overallStatus: 'pass' | 'warn' | 'fail' | 'none';
-  lastRunAt: string;
-  assertions: TestAssertion[];
-}
-
-function buildHealthSummaries(
-  extraKpis: KpiDefinition[],
-  extraAssertions: TestAssertion[],
-): KpiHealthSummary[] {
-  const publishedIds = new Set(extraKpis.map(k => k.kpiId));
-  const baseRegistry = KPI_REGISTRY.filter(k => k.status === 'published' && !publishedIds.has(k.kpiId));
-  const allAssertions = [...TEST_ASSERTIONS, ...extraAssertions];
-  const allKpis = [...extraKpis, ...baseRegistry];
-  return allKpis.map(kpi => {
-    const assertions = allAssertions.filter(a => a.kpiId === kpi.kpiId);
-    const passing = assertions.filter(a => a.lastResult === 'pass').length;
-    const warnings = assertions.filter(a => a.lastResult === 'warn').length;
-    const failures = assertions.filter(a => a.lastResult === 'fail').length;
-    const overallStatus = failures > 0 ? 'fail' : warnings > 0 ? 'warn' : assertions.length > 0 ? 'pass' : 'none';
-    const lastRunAt = assertions.length > 0
-      ? assertions.reduce((latest, a) => a.lastRunAt > latest ? a.lastRunAt : latest, assertions[0].lastRunAt)
-      : '';
-    return {
-      kpiId: kpi.kpiId,
-      displayName: kpi.displayName,
-      owner: kpi.owner,
-      totalTests: assertions.length,
-      passing,
-      warnings,
-      failures,
-      overallStatus,
-      lastRunAt,
-      assertions,
-    };
-  });
-}
 
 function AssertionTypeIcon({ type }: { type: string }) {
   const icons: Record<string, string> = {
@@ -109,20 +23,35 @@ function AssertionTypeIcon({ type }: { type: string }) {
 export function KpiHealth() {
   const [filter, setFilter] = useState<HealthFilter>('all');
   const [expandedKpi, setExpandedKpi] = useState<string | null>(null);
-  const [published, setPublished] = useState<PublishedKpi[]>([]);
+  const [snapshot, setSnapshot] = useState<HealthSnapshot | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
 
-  useEffect(() => {
-    const load = () => getPublishedKpis().then(d => setPublished(d.kpis)).catch(() => {});
-    load();
-    const t = setInterval(load, 4000);
-    return () => clearInterval(t);
+  const load = useCallback(() => {
+    getKpiHealth().then(setSnapshot).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
-  const summaries = useMemo(() => {
-    const extraKpis = published.map(publishedToKpiDefinition);
-    const extraAssertions = published.flatMap(syntheticAssertions);
-    return buildHealthSummaries(extraKpis, extraAssertions);
-  }, [published]);
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 30_000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  const handleRunNow = async () => {
+    setRunning(true);
+    try {
+      const result = await runKpiHealth();
+      setSnapshot(result);
+    } catch { /* ignore */ }
+    setRunning(false);
+  };
+
+  const summaries = snapshot?.summaries ?? [];
+  const totalAssertions = snapshot?.totalAssertions ?? 0;
+  const totalPassing = snapshot?.totalPassing ?? 0;
+  const totalWarning = snapshot?.totalWarnings ?? 0;
+  const totalFailing = snapshot?.totalFailures ?? 0;
+  const overallHealth = totalFailing > 0 ? 'fail' : totalWarning > 0 ? 'warn' : 'pass';
 
   const filtered = summaries.filter(s => {
     if (filter === 'all') return true;
@@ -132,17 +61,46 @@ export function KpiHealth() {
     return true;
   });
 
-  const totalAssertions = summaries.reduce((sum, s) => sum + s.totalTests, 0);
-  const totalPassing = summaries.reduce((sum, s) => sum + s.passing, 0);
-  const totalWarning = summaries.reduce((sum, s) => sum + s.warnings, 0);
-  const totalFailing = summaries.reduce((sum, s) => sum + s.failures, 0);
-  const overallHealth = totalFailing > 0 ? 'fail' : totalWarning > 0 ? 'warn' : 'pass';
+  if (loading && !snapshot) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-navy-200 border-t-navy-600" />
+        <span className="ml-3 text-slate-500">Running health checks against database...</span>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900">KPI Health Monitor</h2>
-        <p className="mt-1 text-sm text-slate-500">Automated test assertions track the health of every published KPI. Runs daily via Databricks Jobs.</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">KPI Health Monitor</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Live test assertions run against the Postgres database.
+            {snapshot && (
+              <> Last run: {new Date(snapshot.runAt).toLocaleString()}</>
+            )}
+          </p>
+        </div>
+        <button
+          onClick={handleRunNow}
+          disabled={running}
+          className="flex items-center gap-2 rounded-lg bg-navy-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-700 disabled:opacity-50"
+        >
+          {running ? (
+            <>
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+              Running...
+            </>
+          ) : (
+            <>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
+              </svg>
+              Run Now
+            </>
+          )}
+        </button>
       </div>
 
       {/* Overall health banner */}
@@ -167,7 +125,7 @@ export function KpiHealth() {
                 {overallHealth === 'pass' ? 'All Systems Healthy' : overallHealth === 'warn' ? 'Warnings Detected' : 'Failures Detected'}
               </div>
               <div className="text-sm text-slate-500">
-                Last sweep: {new Date().toLocaleDateString()} 06:00 UTC via Databricks Jobs
+                {snapshot ? `Assertions executed live at ${new Date(snapshot.runAt).toLocaleTimeString()}` : 'No data yet'}
               </div>
             </div>
           </div>
@@ -245,22 +203,28 @@ export function KpiHealth() {
               </button>
               {isExpanded && (
                 <div className="border-t border-slate-100 px-5 py-3 space-y-2">
-                  {s.assertions.map(a => (
+                  {s.assertions.map((a: AssertionResult) => (
                     <div key={a.assertionId} className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-4 py-2.5">
                       <div className="flex items-center gap-3">
                         <AssertionTypeIcon type={a.assertionType} />
                         <div>
                           <div className="text-sm text-slate-700">{a.description}</div>
-                          <div className="text-xs text-slate-400 font-mono">{a.assertionType} \u00B7 severity: {a.severity}</div>
+                          <div className="text-xs text-slate-400 font-mono">
+                            {a.assertionType} · severity: {a.severity}
+                            {a.message !== 'Assertion passed' && (
+                              <> · {a.message}</>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
+                        <span className="text-xs text-slate-400">{a.durationMs}ms</span>
                         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
                           a.lastResult === 'pass' ? 'bg-emerald-100 text-emerald-700' : a.lastResult === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
                         }`}>
                           {a.lastResult.toUpperCase()}
                         </span>
-                        <span className="text-xs text-slate-400">{new Date(a.lastRunAt).toLocaleString()}</span>
+                        <span className="text-xs text-slate-400">{new Date(a.lastRunAt).toLocaleTimeString()}</span>
                       </div>
                     </div>
                   ))}
