@@ -40,14 +40,14 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
   };
 
-  const inputCls = 'block w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/10';
+  const inputCls = 'block w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm transition focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/10';
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-700 shadow-lg shadow-indigo-600/25 mb-4">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-navy-600 to-navy-700 shadow-lg shadow-navy-700/25 mb-4">
             <svg className="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
             </svg>
@@ -132,7 +132,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full rounded-lg bg-navy-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-navy-700 focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <span className="inline-flex items-center gap-2">
@@ -151,7 +151,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           {mode === 'login' && (
             <p className="mt-4 text-center text-xs text-slate-400">
               Don&apos;t have an account?{' '}
-              <button onClick={() => { setMode('register'); setError(null); }} className="font-semibold text-indigo-600 hover:text-indigo-700">
+              <button onClick={() => { setMode('register'); setError(null); }} className="font-semibold text-accent hover:text-accent-dark">
                 Create one
               </button>
             </p>
@@ -159,7 +159,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           {mode === 'register' && (
             <p className="mt-4 text-center text-xs text-slate-400">
               Already have an account?{' '}
-              <button onClick={() => { setMode('login'); setError(null); }} className="font-semibold text-indigo-600 hover:text-indigo-700">
+              <button onClick={() => { setMode('login'); setError(null); }} className="font-semibold text-accent hover:text-accent-dark">
                 Sign in
               </button>
             </p>
