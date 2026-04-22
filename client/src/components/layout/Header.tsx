@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { UserProfile } from 'shared/types';
 
 export type AppTab = 'dashboard' | 'catalog' | 'studio' | 'health';
@@ -33,6 +33,16 @@ function getInitials(name: string): string {
 
 export function Header({ activeTab, dashboardPhase, onReset, sidebarCollapsed, user, onLogout }: HeaderProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
+
+  useEffect(() => {
+    if (!showUserMenu) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowUserMenu(false);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [showUserMenu]);
+
   const now = new Date();
   const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -43,8 +53,7 @@ export function Header({ activeTab, dashboardPhase, onReset, sidebarCollapsed, u
       style={{ background: 'linear-gradient(135deg, hsl(210, 50%, 16%) 0%, hsl(210, 55%, 12%) 100%)' }}
     >
       <div
-        className="flex items-center justify-between px-6 py-3 transition-all duration-300"
-        style={{ marginLeft: sidebarCollapsed ? 68 : 240 }}
+        className={`flex items-center justify-between px-6 py-3 transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-[68px]' : 'lg:ml-60'}`}
       >
         <div className="flex items-center gap-4 pl-2 lg:pl-0">
           <div className="w-9 lg:hidden" />
@@ -82,6 +91,9 @@ export function Header({ activeTab, dashboardPhase, onReset, sidebarCollapsed, u
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
               className="flex items-center gap-2.5 rounded-lg px-2 py-1 transition hover:bg-white/5"
+              aria-expanded={showUserMenu}
+              aria-haspopup="true"
+              aria-label="User menu"
             >
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20 text-xs font-bold text-accent-light">
                 {user ? getInitials(user.displayName) : '?'}
@@ -100,7 +112,7 @@ export function Header({ activeTab, dashboardPhase, onReset, sidebarCollapsed, u
             {showUserMenu && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
-                <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl bg-white border border-slate-200/60 shadow-xl shadow-slate-900/10 p-2">
+                <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl bg-white border border-slate-200/60 shadow-xl shadow-slate-900/10 p-2" role="menu">
                   {user && (
                     <div className="px-3 py-2 border-b border-slate-100 mb-1">
                       <p className="text-sm font-semibold text-slate-900">{user.displayName}</p>
@@ -108,6 +120,7 @@ export function Header({ activeTab, dashboardPhase, onReset, sidebarCollapsed, u
                     </div>
                   )}
                   <button
+                    role="menuitem"
                     onClick={() => {
                       setShowUserMenu(false);
                       onLogout?.();

@@ -15,8 +15,8 @@ interface MetricTileProps {
 export function MetricTile({ metric, value, userId, onClick }: MetricTileProps) {
   const status = getHealthStatus(value.current, metric.thresholds);
   const deltaPositive = value.delta >= 0;
-  const deltaColor = deltaPositive ? 'text-emerald-600' : 'text-red-600';
-  const trendLabel = deltaPositive ? 'vs prior period' : 'vs prior period';
+  const isGoodDelta = metric.thresholds.direction === 'lower-is-better' ? value.delta <= 0 : value.delta >= 0;
+  const deltaColor = isGoodDelta ? 'text-emerald-600' : 'text-red-600';
 
   const sparkData = value.trend.map((v, i) => ({ i, v }));
 
@@ -71,7 +71,7 @@ export function MetricTile({ metric, value, userId, onClick }: MetricTileProps) 
             </svg>
             {formatDelta(value.delta)}
           </span>
-          <span className="text-[10px] font-medium text-slate-400">{trendLabel}</span>
+          <span className="text-[10px] font-medium text-slate-400">vs prior period</span>
         </div>
 
         {/* Target comparison */}

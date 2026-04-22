@@ -71,6 +71,14 @@ function TestStatusDot({ kpiId }: { kpiId: string }) {
 function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => void }) {
   const [activeTab, setActiveTab] = useState<'sql' | 'tests' | 'versions'>('sql');
   const assertions = TEST_ASSERTIONS.filter(a => a.kpiId === kpi.kpiId);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
   const versions = VERSION_HISTORY[kpi.kpiId] ?? [{ version: kpi.version, createdAt: kpi.createdAt, createdBy: kpi.createdBy, changeReason: kpi.changeReason, status: kpi.status as 'published' | 'deprecated' }];
 
   return (
@@ -190,17 +198,22 @@ function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => v
   );
 }
 
+type SortKey = 'name' | 'status' | 'version' | 'owner';
+
 export function KpiCatalog() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedKpi, setSelectedKpi] = useState<KpiDefinition | null>(null);
   const [published, setPublished] = useState<PublishedKpi[]>([]);
+  const [sortBy, setSortBy] = useState<SortKey>('name');
+  const [sortAsc, setSortAsc] = useState(true);
 
   useEffect(() => {
     const load = () => getPublishedKpis().then(d => setPublished(d.kpis)).catch(() => {});
     load();
-    // Poll periodically so a newly-published KPI appears without a manual refresh
-    const t = setInterval(load, 4000);
+    const t = setInterval(() => {
+      if (!document.hidden) load();
+    }, 10_000);
     return () => clearInterval(t);
   }, []);
 
@@ -211,6 +224,11 @@ export function KpiCatalog() {
     return [...published.map(publishedToKpiDefinition), ...base];
   }, [published]);
 
+  const handleSort = (key: SortKey) => {
+    if (sortBy === key) setSortAsc(!sortAsc);
+    else { setSortBy(key); setSortAsc(true); }
+  };
+
   const filtered = registry.filter(kpi => {
     const matchesSearch = search === '' ||
       kpi.displayName.toLowerCase().includes(search.toLowerCase()) ||
@@ -218,6 +236,13 @@ export function KpiCatalog() {
       kpi.tags.some(t => t.toLowerCase().includes(search.toLowerCase()));
     const matchesStatus = statusFilter === 'all' || kpi.status === statusFilter;
     return matchesSearch && matchesStatus;
+  }).sort((a, b) => {
+    const dir = sortAsc ? 1 : -1;
+    if (sortBy === 'name') return dir * a.displayName.localeCompare(b.displayName);
+    if (sortBy === 'status') return dir * a.status.localeCompare(b.status);
+    if (sortBy === 'version') return dir * (a.version - b.version);
+    if (sortBy === 'owner') return dir * a.owner.localeCompare(b.owner);
+    return 0;
   });
 
   const statusCounts = registry.reduce((acc, kpi) => {
@@ -261,6 +286,32 @@ export function KpiCatalog() {
             className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
           />
         </div>
+      </div>
+
+      {/* Sort controls */}
+      <div className="mb-3 flex items-center gap-1 text-[11px]">
+        <span className="text-slate-400 font-medium mr-1">Sort by</span>
+        {([
+          { key: 'name' as SortKey, label: 'Name' },
+          { key: 'status' as SortKey, label: 'Status' },
+          { key: 'version' as SortKey, label: 'Version' },
+          { key: 'owner' as SortKey, label: 'Owner' },
+        ]).map(s => (
+          <button
+            key={s.key}
+            onClick={() => handleSort(s.key)}
+            className={`rounded-md px-2.5 py-1 font-semibold transition ${
+              sortBy === s.key
+                ? 'bg-navy-600 text-white'
+                : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700'
+            }`}
+          >
+            {s.label}
+            {sortBy === s.key && (
+              <span className="ml-1">{sortAsc ? '\u2191' : '\u2193'}</span>
+            )}
+          </button>
+        ))}
       </div>
 
       {/* KPI list */}

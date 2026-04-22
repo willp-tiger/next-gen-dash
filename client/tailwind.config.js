@@ -11,6 +11,8 @@ export default {
     'lg:grid-cols-2',
     'lg:grid-cols-3',
     'lg:grid-cols-4',
+    'lg:ml-60',
+    'lg:ml-[68px]',
   ],
   theme: {
     extend: {

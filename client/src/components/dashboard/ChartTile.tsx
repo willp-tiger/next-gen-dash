@@ -43,7 +43,8 @@ export function ChartTile({ metric, value, userId, onClick }: ChartTileProps) {
   const color = STATUS_STROKE[status];
   const data = value.trend.map((v, i) => ({ period: `Q${(i % 4) + 1}`, v }));
   const deltaPositive = value.delta >= 0;
-  const deltaColor = deltaPositive ? 'text-emerald-600' : 'text-red-600';
+  const isGoodDelta = metric.thresholds.direction === 'lower-is-better' ? value.delta <= 0 : value.delta >= 0;
+  const deltaColor = isGoodDelta ? 'text-emerald-600' : 'text-red-600';
 
   const handleClick = () => {
     if (userId) {

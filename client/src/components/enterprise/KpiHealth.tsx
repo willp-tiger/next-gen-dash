@@ -124,8 +124,20 @@ export function KpiHealth() {
               }`}>
                 {overallHealth === 'pass' ? 'All Systems Healthy' : overallHealth === 'warn' ? 'Warnings Detected' : 'Failures Detected'}
               </div>
-              <div className="text-sm text-slate-500">
-                {snapshot ? `Assertions executed live at ${new Date(snapshot.runAt).toLocaleTimeString()}` : 'No data yet'}
+              <div className="flex items-center gap-3 text-sm text-slate-500">
+                <span>{snapshot ? `Assertions executed live at ${new Date(snapshot.runAt).toLocaleTimeString()}` : 'No data yet'}</span>
+                {overallHealth !== 'pass' && (
+                  <button
+                    onClick={() => setFilter(overallHealth === 'fail' ? 'failing' : 'warning')}
+                    className={`rounded-md px-2 py-0.5 text-xs font-semibold transition ${
+                      overallHealth === 'fail'
+                        ? 'bg-red-200 text-red-800 hover:bg-red-300'
+                        : 'bg-amber-200 text-amber-800 hover:bg-amber-300'
+                    }`}
+                  >
+                    Jump to {overallHealth === 'fail' ? 'failures' : 'warnings'}
+                  </button>
+                )}
               </div>
             </div>
           </div>

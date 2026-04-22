@@ -22,6 +22,7 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -75,6 +76,35 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
     }
   };
 
+  const handleQuickAction = (text: string) => {
+    setInput(text);
+    setTimeout(() => {
+      setInput('');
+      setMessages(prev => [...prev, { role: 'user', text }]);
+      setIsLoading(true);
+      dashboardChat(userId, text).then(res => {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          text: res.message,
+          action: res.action,
+          authorPhrase: res.authorPhrase ?? null,
+        }]);
+        if (res.config) onConfigUpdate(res.config);
+      }).catch(() => {
+        setMessages(prev => [...prev, { role: 'assistant', text: 'Sorry, something went wrong. Try again.' }]);
+      }).finally(() => setIsLoading(false));
+    }, 100);
+  };
+
+  const QUICK_ACTIONS = [
+    'Add a revenue breakdown by territory',
+    'Show me cancellation trends as a chart',
+    'Remove the least important metric',
+    'Filter dashboard to EMEA only',
+  ];
+
+  const showQuickActions = messages.length === 1 && messages[0].role === 'assistant';
+
   const actionBadge = (action: string | null | undefined) => {
     if (!action) return null;
     const colors: Record<string, string> = {
@@ -112,7 +142,11 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
 
       {/* Chat panel */}
       {isOpen && (
-        <div className="fixed bottom-24 right-6 z-50 flex w-[400px] flex-col rounded-2xl bg-white shadow-2xl shadow-slate-900/10 border border-slate-200/60" style={{ height: '500px' }}>
+        <div className={`fixed z-50 flex flex-col rounded-2xl bg-white shadow-2xl shadow-slate-900/10 border border-slate-200/60 transition-all duration-300 ${
+          isExpanded
+            ? 'bottom-6 right-6 w-[calc(100vw-3rem)] sm:w-[640px]'
+            : 'bottom-24 right-6 w-[calc(100vw-3rem)] sm:w-[400px]'
+        }`} style={{ height: isExpanded ? 'min(700px, calc(100vh - 3rem))' : 'min(500px, calc(100vh - 8rem))' }}>
           {/* Header */}
           <div className="flex items-center justify-between rounded-t-2xl px-5 py-3.5" style={{ background: 'linear-gradient(135deg, hsl(210, 50%, 16%) 0%, hsl(210, 55%, 12%) 100%)' }}>
             <div>
@@ -130,7 +164,20 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
               >
                 Reset
               </button>
-              <button onClick={() => setIsOpen(false)} className="text-navy-300 hover:text-white transition">
+              <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="text-navy-300 hover:text-white transition hidden sm:block"
+                title={isExpanded ? 'Minimize' : 'Expand'}
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  {isExpanded ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                  )}
+                </svg>
+              </button>
+              <button onClick={() => { setIsOpen(false); setIsExpanded(false); }} className="text-navy-300 hover:text-white transition">
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -165,6 +212,20 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
                 </div>
               </div>
             ))}
+            {showQuickActions && !isLoading && (
+              <div className="space-y-1.5 px-1">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Quick actions</p>
+                {QUICK_ACTIONS.map(action => (
+                  <button
+                    key={action}
+                    onClick={() => handleQuickAction(action)}
+                    className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs text-slate-600 transition hover:border-navy-300 hover:bg-accent/5 hover:text-accent-dark"
+                  >
+                    {action}
+                  </button>
+                ))}
+              </div>
+            )}
             {isLoading && (
               <div className="flex justify-start">
                 <div className="rounded-2xl bg-slate-50 px-4 py-2.5 ring-1 ring-slate-200/60">
@@ -189,6 +250,7 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
                 onKeyDown={handleKeyDown}
                 disabled={isLoading}
                 placeholder="e.g., Add a revenue breakdown by territory"
+                aria-label="Dashboard modification request"
                 className="flex-1 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm placeholder-slate-400 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/10 disabled:bg-slate-50 transition"
               />
               <button

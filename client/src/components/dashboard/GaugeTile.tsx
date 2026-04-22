@@ -14,7 +14,8 @@ interface GaugeTileProps {
 export function GaugeTile({ metric, value, userId, onClick }: GaugeTileProps) {
   const status = getHealthStatus(value.current, metric.thresholds);
   const deltaPositive = value.delta >= 0;
-  const deltaColor = deltaPositive ? 'text-emerald-600' : 'text-red-600';
+  const isGoodDelta = metric.thresholds.direction === 'lower-is-better' ? value.delta <= 0 : value.delta >= 0;
+  const deltaColor = isGoodDelta ? 'text-emerald-600' : 'text-red-600';
 
   const { green, yellow, direction } = metric.thresholds;
   let percent: number;

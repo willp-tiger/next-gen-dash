@@ -71,8 +71,7 @@ export default function App() {
         onLogout={handleLogout}
       />
       <main
-        className="transition-all duration-300 px-6 py-6 lg:px-8"
-        style={{ marginLeft: sidebarCollapsed ? 68 : 240 }}
+        className={`transition-all duration-300 px-4 py-6 sm:px-6 lg:px-8 ${sidebarCollapsed ? 'lg:ml-[68px]' : 'lg:ml-60'}`}
       >
         <div className="mx-auto max-w-[1600px]">
           {activeTab === 'dashboard' && (
