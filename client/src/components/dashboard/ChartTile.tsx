@@ -41,7 +41,10 @@ const TOOLTIP_STYLE = {
 export function ChartTile({ metric, value, userId, onClick }: ChartTileProps) {
   const status = getHealthStatus(value.current, metric.thresholds);
   const color = STATUS_STROKE[status];
-  const data = value.trend.map((v, i) => ({ period: `Q${(i % 4) + 1}`, v }));
+  // Sequential index labels. We don't know the period granularity here (could
+  // be quarters, months, or no trend at all for published KPIs), so labeling
+  // these as Q1/Q2/etc. would lie. Show position-from-oldest instead.
+  const data = value.trend.map((v, i) => ({ period: String(i + 1), v }));
   const deltaPositive = value.delta >= 0;
   const isGoodDelta = metric.thresholds.direction === 'lower-is-better' ? value.delta <= 0 : value.delta >= 0;
   const deltaColor = isGoodDelta ? 'text-emerald-600' : 'text-red-600';

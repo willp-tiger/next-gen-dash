@@ -3,7 +3,7 @@ import type { DashboardConfig } from 'shared/types';
 import { getPersonaConfigs } from '../../api/client';
 
 interface PersonaSelectorProps {
-  onSelect: (config: DashboardConfig) => void;
+  onSelect: (config: DashboardConfig | null) => void;
   activePersona: string | null;
 }
 
@@ -86,7 +86,7 @@ export function PersonaSelector({ onSelect, activePersona }: PersonaSelectorProp
           {activePersona && (
             <button
               onClick={() => {
-                onSelect(null as unknown as DashboardConfig);
+                onSelect(null);
                 setIsOpen(false);
               }}
               className="mt-1 w-full rounded-lg px-3 py-2 text-center text-xs font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"

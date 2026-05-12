@@ -38,6 +38,12 @@ router.post('/', async (req: Request, res: Response) => {
     const textBlock = response.content.find((b) => b.type === 'text');
     const reply = textBlock?.type === 'text' ? textBlock.text : '';
 
+    if (!reply) {
+      // Don't fabricate a success message — surface that the model didn't reply.
+      res.status(502).json({ error: 'Empty response from model' });
+      return;
+    }
+
     history.push({ role: 'assistant', content: reply });
     conversations.set(userId, history);
 
@@ -60,7 +66,7 @@ router.post('/', async (req: Request, res: Response) => {
       .trim();
 
     res.json({
-      reply: displayReply || "Great, I have everything I need. Let me build your dashboard!",
+      reply: displayReply,
       isReady,
       transcript,
     });

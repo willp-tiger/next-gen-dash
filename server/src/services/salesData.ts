@@ -1,6 +1,8 @@
 import pool from './db.js';
 import { getPublishedKpi, getPublishedKpis } from './kpiStore.js';
 import type { PublishedKpi } from './kpiStore.js';
+import { getMetricDefs, normalizePublishedSql } from './kpiDefinitionStore.js';
+import type { MetricDefinition } from './kpiDefinitionStore.js';
 import type {
   MetricsSnapshot,
   MetricValue,
@@ -12,155 +14,6 @@ import type {
   CategoricalSnapshot,
   CategoryBreakdown,
 } from '../../../shared/types.js';
-
-// === Metric Definitions ===
-
-interface MetricDefinition {
-  id: string;
-  label: string;
-  unit: string;
-  chartType: MetricConfig['chartType'];
-  direction: ThresholdConfig['direction'];
-  greenMax: number;
-  yellowMax: number;
-  sql: string;
-  trendSql: string;
-}
-
-const METRIC_DEFS: MetricDefinition[] = [
-  {
-    id: 'total_revenue',
-    label: 'Total Revenue',
-    unit: 'dollars',
-    chartType: 'line',
-    direction: 'higher-is-better',
-    greenMax: 300000,
-    yellowMax: 200000,
-    sql: `SELECT COALESCE(SUM(sales), 0) AS value FROM sales_orders`,
-    trendSql: `SELECT year_id * 10 + qtr_id AS period, SUM(sales) AS value FROM sales_orders GROUP BY year_id, qtr_id ORDER BY period`,
-  },
-  {
-    id: 'avg_order_value',
-    label: 'Avg Order Value',
-    unit: 'dollars',
-    chartType: 'line',
-    direction: 'higher-is-better',
-    greenMax: 4000,
-    yellowMax: 3000,
-    sql: `SELECT COALESCE(AVG(sales), 0) AS value FROM sales_orders`,
-    trendSql: `SELECT year_id * 10 + qtr_id AS period, AVG(sales) AS value FROM sales_orders GROUP BY year_id, qtr_id ORDER BY period`,
-  },
-  {
-    id: 'total_orders',
-    label: 'Total Orders',
-    unit: 'count',
-    chartType: 'bar',
-    direction: 'higher-is-better',
-    greenMax: 350,
-    yellowMax: 250,
-    sql: `SELECT COUNT(DISTINCT order_number) AS value FROM sales_orders`,
-    trendSql: `SELECT year_id * 10 + qtr_id AS period, COUNT(DISTINCT order_number) AS value FROM sales_orders GROUP BY year_id, qtr_id ORDER BY period`,
-  },
-  {
-    id: 'units_sold',
-    label: 'Units Sold',
-    unit: 'count',
-    chartType: 'bar',
-    direction: 'higher-is-better',
-    greenMax: 35000,
-    yellowMax: 25000,
-    sql: `SELECT COALESCE(SUM(quantity_ordered), 0) AS value FROM sales_orders`,
-    trendSql: `SELECT year_id * 10 + qtr_id AS period, SUM(quantity_ordered) AS value FROM sales_orders GROUP BY year_id, qtr_id ORDER BY period`,
-  },
-  {
-    id: 'avg_price',
-    label: 'Avg Price per Unit',
-    unit: 'dollars',
-    chartType: 'line',
-    direction: 'higher-is-better',
-    greenMax: 90,
-    yellowMax: 75,
-    sql: `SELECT COALESCE(AVG(price_each), 0) AS value FROM sales_orders`,
-    trendSql: `SELECT year_id * 10 + qtr_id AS period, AVG(price_each) AS value FROM sales_orders GROUP BY year_id, qtr_id ORDER BY period`,
-  },
-  {
-    id: 'fulfillment_rate',
-    label: 'Fulfillment Rate',
-    unit: 'percent',
-    chartType: 'gauge',
-    direction: 'higher-is-better',
-    greenMax: 95,
-    yellowMax: 85,
-    sql: `SELECT COUNT(CASE WHEN status = 'Shipped' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0) AS value FROM sales_orders`,
-    trendSql: `SELECT year_id * 10 + qtr_id AS period, COUNT(CASE WHEN status = 'Shipped' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0) AS value FROM sales_orders GROUP BY year_id, qtr_id ORDER BY period`,
-  },
-  {
-    id: 'cancelled_order_rate',
-    label: 'Cancelled Order Rate',
-    unit: 'percent',
-    chartType: 'bar',
-    direction: 'lower-is-better',
-    greenMax: 3,
-    yellowMax: 7,
-    sql: `SELECT COUNT(CASE WHEN status = 'Cancelled' THEN 1 END) * 100.0 / NULLIF(COUNT(DISTINCT order_number), 0) AS value FROM sales_orders`,
-    trendSql: `SELECT year_id * 10 + qtr_id AS period, COUNT(CASE WHEN status = 'Cancelled' THEN 1 END) * 100.0 / NULLIF(COUNT(DISTINCT order_number), 0) AS value FROM sales_orders GROUP BY year_id, qtr_id ORDER BY period`,
-  },
-  {
-    id: 'avg_deal_size_value',
-    label: 'Avg Deal Size',
-    unit: 'dollars',
-    chartType: 'area',
-    direction: 'higher-is-better',
-    greenMax: 4500,
-    yellowMax: 3000,
-    sql: `SELECT COALESCE(AVG(total), 0) AS value FROM (SELECT order_number, SUM(sales) AS total FROM sales_orders GROUP BY order_number) sub`,
-    trendSql: `SELECT year_id * 10 + qtr_id AS period, AVG(total) AS value FROM (SELECT order_number, year_id, qtr_id, SUM(sales) AS total FROM sales_orders GROUP BY order_number, year_id, qtr_id) sub GROUP BY year_id, qtr_id, period ORDER BY period`,
-  },
-  {
-    id: 'revenue_per_customer',
-    label: 'Revenue per Customer',
-    unit: 'dollars',
-    chartType: 'line',
-    direction: 'higher-is-better',
-    greenMax: 120000,
-    yellowMax: 80000,
-    sql: `SELECT COALESCE(SUM(sales) / NULLIF(COUNT(DISTINCT customer_name), 0), 0) AS value FROM sales_orders`,
-    trendSql: `SELECT year_id * 10 + qtr_id AS period, SUM(sales) / NULLIF(COUNT(DISTINCT customer_name), 0) AS value FROM sales_orders GROUP BY year_id, qtr_id ORDER BY period`,
-  },
-  {
-    id: 'order_frequency',
-    label: 'Orders per Customer',
-    unit: 'count',
-    chartType: 'bar',
-    direction: 'higher-is-better',
-    greenMax: 4,
-    yellowMax: 2,
-    sql: `SELECT COALESCE(COUNT(DISTINCT order_number)::float / NULLIF(COUNT(DISTINCT customer_name), 0), 0) AS value FROM sales_orders`,
-    trendSql: `SELECT year_id * 10 + qtr_id AS period, COUNT(DISTINCT order_number)::float / NULLIF(COUNT(DISTINCT customer_name), 0) AS value FROM sales_orders GROUP BY year_id, qtr_id ORDER BY period`,
-  },
-  {
-    id: 'product_line_count',
-    label: 'Active Product Lines',
-    unit: 'count',
-    chartType: 'number',
-    direction: 'higher-is-better',
-    greenMax: 7,
-    yellowMax: 5,
-    sql: `SELECT COUNT(DISTINCT product_line) AS value FROM sales_orders`,
-    trendSql: `SELECT year_id * 10 + qtr_id AS period, COUNT(DISTINCT product_line) AS value FROM sales_orders GROUP BY year_id, qtr_id ORDER BY period`,
-  },
-  {
-    id: 'territory_revenue_share',
-    label: 'Top Territory Revenue %',
-    unit: 'percent',
-    chartType: 'gauge',
-    direction: 'lower-is-better',
-    greenMax: 40,
-    yellowMax: 55,
-    sql: `SELECT MAX(terr_rev) * 100.0 / NULLIF(SUM(terr_rev), 0) AS value FROM (SELECT territory, SUM(sales) AS terr_rev FROM sales_orders GROUP BY territory) sub`,
-    trendSql: `SELECT year_id * 10 + qtr_id AS period, MAX(terr_rev) * 100.0 / NULLIF(SUM(terr_rev), 0) AS value FROM (SELECT year_id, qtr_id, territory, SUM(sales) AS terr_rev FROM sales_orders GROUP BY year_id, qtr_id, territory) sub GROUP BY year_id, qtr_id, period ORDER BY period`,
-  },
-];
 
 function buildConditions(filters: FilterState | undefined, startIdx: number): { conditions: string[]; params: unknown[] } {
   const conditions: string[] = [];
@@ -199,7 +52,7 @@ async function queryMetric(def: MetricDefinition, filters?: FilterState): Promis
   const current = parseFloat(valueRes.rows[0]?.value ?? 0);
   const trend = trendRes
     ? trendRes.rows.map((r: { value: string }) => parseFloat(r.value || '0'))
-    : [current, current, current, current];
+    : [];
   const prev = trend.length >= 2 ? trend[trend.length - 2] : current;
   const delta = parseFloat((current - prev).toFixed(2));
 
@@ -208,17 +61,6 @@ async function queryMetric(def: MetricDefinition, filters?: FilterState): Promis
     trend,
     delta,
   };
-}
-
-// Published KPIs from the Studio carry only a single `sqlLogic`. Normalize it
-// for the real Postgres schema (strip the fictional Unity Catalog qualifier
-// and any :year/:quarter template placeholders) and adapt the shape to
-// MetricDefinition so queryMetric can reuse the same pipeline.
-export function normalizePublishedSql(sql: string): string {
-  return sql
-    .replace(/production\.\w+\.sales_orders/g, 'sales_orders')
-    .replace(/\s+WHERE\s+[^;]*?:[a-z_]+[^;]*$/i, '')
-    .trim();
 }
 
 function publishedToDef(k: PublishedKpi): MetricDefinition {
@@ -231,17 +73,17 @@ function publishedToDef(k: PublishedKpi): MetricDefinition {
     greenMax: k.thresholds.greenMax,
     yellowMax: k.thresholds.yellowMax,
     sql: normalizePublishedSql(k.sqlLogic),
-    trendSql: '', // No trend for published KPIs — queryMetric synthesizes a flat series
+    trendSql: '', // Published KPIs have no trend series; UI must render without sparkline.
   };
 }
 
 function resolveDefs(metricIds?: string[]): MetricDefinition[] {
   if (!metricIds) {
-    return [...METRIC_DEFS, ...getPublishedKpis().map(publishedToDef)];
+    return [...getMetricDefs(), ...getPublishedKpis().map(publishedToDef)];
   }
   const out: MetricDefinition[] = [];
   for (const id of metricIds) {
-    const builtIn = METRIC_DEFS.find(d => d.id === id);
+    const builtIn = getMetricDefs().find(d => d.id === id);
     if (builtIn) { out.push(builtIn); continue; }
     const pub = getPublishedKpi(id);
     if (pub) { out.push(publishedToDef(pub)); continue; }
@@ -253,13 +95,21 @@ export async function generateSnapshot(metricIds?: string[], filters?: FilterSta
   const defs = resolveDefs(metricIds);
 
   const results = await Promise.all(defs.map(d =>
-    queryMetric(d, filters).catch((err) => {
-      console.error(`Metric ${d.id} failed:`, err?.message ?? err);
-      return { current: 0, trend: [], delta: 0 } as MetricValue;
-    })
+    queryMetric(d, filters).then(
+      (value) => ({ ok: true as const, value }),
+      (err) => {
+        console.error(`Metric ${d.id} failed:`, err?.message ?? err);
+        return { ok: false as const, error: err instanceof Error ? err.message : String(err) };
+      }
+    )
   ));
   const metrics: Record<string, MetricValue> = {};
-  defs.forEach((d, i) => { metrics[d.id] = results[i]; });
+  defs.forEach((d, i) => {
+    const r = results[i];
+    if (r.ok) metrics[d.id] = r.value;
+    // Failed metrics are omitted from the snapshot so the client can render
+    // an explicit "no data" state instead of a misleading 0.
+  });
 
   return { timestamp: new Date().toISOString(), metrics };
 }
@@ -295,6 +145,66 @@ function buildFilterWhere(filters?: FilterState): { sql: string; params: unknown
   return { sql: conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '', params };
 }
 
+export interface HeatmapSnapshot {
+  timestamp: string;
+  rowDimension: string;
+  colDimension: string;
+  rowLabels: string[];
+  colLabels: string[];
+  grid: (number | null)[][];
+}
+
+const HEATMAP_DIMS: Record<string, string> = {
+  product_line: 'product_line',
+  country: 'country',
+  territory: 'territory',
+  deal_size: 'deal_size',
+};
+
+export async function generateHeatmapBreakdown(
+  rowDim: string,
+  colDim: string,
+  filters?: FilterState
+): Promise<HeatmapSnapshot> {
+  const rowCol = HEATMAP_DIMS[rowDim];
+  const colCol = HEATMAP_DIMS[colDim];
+  if (!rowCol || !colCol) throw new Error(`Invalid heatmap dimensions: ${rowDim} x ${colDim}`);
+
+  const where = buildFilterWhere(filters);
+  const sql = `SELECT ${rowCol} AS row_label, ${colCol} AS col_label, SUM(sales) AS value
+               FROM sales_orders ${where.sql}
+               GROUP BY ${rowCol}, ${colCol}
+               ORDER BY ${rowCol}, ${colCol}`;
+  const { rows } = await pool.query(sql, where.params);
+
+  const rowSet = new Set<string>();
+  const colSet = new Set<string>();
+  const map = new Map<string, Map<string, number>>();
+  for (const r of rows) {
+    const rl = String(r.row_label);
+    const cl = String(r.col_label);
+    rowSet.add(rl);
+    colSet.add(cl);
+    if (!map.has(rl)) map.set(rl, new Map());
+    map.get(rl)!.set(cl, parseFloat(r.value));
+  }
+
+  const rowLabels = Array.from(rowSet).sort();
+  const colLabels = Array.from(colSet).sort();
+  const grid: (number | null)[][] = rowLabels.map(rl =>
+    colLabels.map(cl => map.get(rl)?.get(cl) ?? null)
+  );
+
+  return {
+    timestamp: new Date().toISOString(),
+    rowDimension: rowDim,
+    colDimension: colDim,
+    rowLabels,
+    colLabels,
+    grid,
+  };
+}
+
 export async function getAvailableFilters() {
   const [productLines, countries, territories, dealSizes, dateRange] = await Promise.all([
     pool.query(`SELECT DISTINCT product_line FROM sales_orders ORDER BY product_line`),
@@ -316,11 +226,11 @@ export async function getAvailableFilters() {
 
 export function getCanonicalConfig(): DashboardConfig {
   const now = new Date().toISOString();
-  const metrics: MetricConfig[] = METRIC_DEFS.map((def, index) => ({
+  const metrics: MetricConfig[] = getMetricDefs().map((def, index) => ({
     id: def.id,
     label: def.label,
     unit: def.unit,
-    chartType: def.chartType,
+    chartType: def.chartType as MetricConfig['chartType'],
     size: 'md' as const,
     thresholds: {
       green: { max: def.greenMax },
@@ -423,4 +333,4 @@ export function getPersonaConfigs(): Record<string, DashboardConfig> {
   return { 'sales-rep': salesRep, director, executive };
 }
 
-export { METRIC_DEFS };
+export { getMetricDefs };

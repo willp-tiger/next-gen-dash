@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { generateSnapshot, getCanonicalConfig, generateCategoricalSnapshot, getAvailableFilters, getPersonaConfigs } from '../services/salesData.js';
+import { generateSnapshot, getCanonicalConfig, generateCategoricalSnapshot, generateHeatmapBreakdown, getAvailableFilters, getPersonaConfigs } from '../services/salesData.js';
 
 const router = Router();
 
@@ -75,6 +75,26 @@ router.get('/categorical', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('Categorical error:', err);
     res.status(500).json({ error: 'Failed to fetch categorical data' });
+  }
+});
+
+router.get('/heatmap', async (req: Request, res: Response) => {
+  try {
+    const row = (req.query.row as string | undefined) || 'product_line';
+    const col = (req.query.col as string | undefined) || 'territory';
+    const filters = {
+      product_line: req.query.product_line as string | undefined,
+      country: req.query.country as string | undefined,
+      territory: req.query.territory as string | undefined,
+      deal_size: req.query.deal_size as string | undefined,
+      dateStart: req.query.dateStart as string | undefined,
+      dateEnd: req.query.dateEnd as string | undefined,
+    };
+    const snapshot = await generateHeatmapBreakdown(row, col, filters);
+    res.json(snapshot);
+  } catch (err) {
+    console.error('Heatmap error:', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to fetch heatmap data' });
   }
 });
 

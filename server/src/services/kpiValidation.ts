@@ -5,7 +5,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import pool from './db.js';
 import { getPublishedKpis } from './kpiStore.js';
-import { METRIC_DEFS, normalizePublishedSql } from './salesData.js';
+import { getMetricDefs, normalizePublishedSql } from './kpiDefinitionStore.js';
 
 const anthropic = new Anthropic();
 const MODEL = 'claude-sonnet-4-20250514';
@@ -56,6 +56,7 @@ export async function* validateKpiCandidate(
       return fail(`Query plan failed: ${cleanPgError(err)}`);
     }
     const confirmed: string[] = [];
+    const lookupErrors: string[] = [];
     for (const t of tableRefs) {
       try {
         const { rows } = await pool.query(
@@ -63,7 +64,12 @@ export async function* validateKpiCandidate(
           [t]
         );
         if (rows.length > 0) confirmed.push(t);
-      } catch { /* noop */ }
+      } catch (err) {
+        lookupErrors.push(`${t}: ${cleanPgError(err)}`);
+      }
+    }
+    if (lookupErrors.length > 0) {
+      console.warn('kpiValidation: information_schema lookups failed:', lookupErrors.join('; '));
     }
     const detail = confirmed.length > 0
       ? `source ${confirmed.length === 1 ? 'table' : 'tables'} resolved: ${confirmed.join(', ')}`
@@ -269,7 +275,7 @@ Reply with ONLY a JSON object, no prose outside it:
 }
 
 async function checkConsistency(c: CandidateKpi): Promise<Omit<StageResult, 'stage' | 'durationMs'>> {
-  const builtIn = METRIC_DEFS.map(m => ({ id: m.id, name: m.label, unit: m.unit, sql: m.sql }));
+  const builtIn = getMetricDefs().map(m => ({ id: m.id, name: m.label, unit: m.unit, sql: m.sql }));
   const published = getPublishedKpis()
     .filter(p => p.kpiId !== c.kpiId)
     .map(p => ({ id: p.kpiId, name: p.displayName, unit: p.unit, sql: p.sqlLogic }));

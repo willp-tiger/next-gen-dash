@@ -2,9 +2,8 @@
 // Results are cached with a TTL so the health endpoint doesn't hammer the DB.
 
 import pool from './db.js';
-import { METRIC_DEFS, normalizePublishedSql } from './salesData.js';
+import { getMetricDefs, normalizePublishedSql } from './kpiDefinitionStore.js';
 import { getPublishedKpis } from './kpiStore.js';
-import type { PublishedKpi } from './kpiStore.js';
 
 export interface AssertionDef {
   assertionId: string;
@@ -60,8 +59,25 @@ interface KpiMeta {
   direction: 'higher-is-better' | 'lower-is-better';
 }
 
+// Tables we know to have an order_date column that we can use for freshness.
+const FRESHNESS_TABLE_DATE_COLUMNS: Record<string, string> = {
+  sales_orders: 'order_date',
+};
+
+function extractPrimaryTable(sql: string): string | null {
+  const re = /\b(?:FROM|JOIN)\s+((?:\w+\.)*\w+)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(sql))) {
+    const parts = m[1].split('.');
+    const leaf = parts[parts.length - 1];
+    if (!leaf || /^sub$|^t\d*$/i.test(leaf)) continue;
+    return leaf;
+  }
+  return null;
+}
+
 function getKpiMetas(): KpiMeta[] {
-  const builtIn: KpiMeta[] = METRIC_DEFS.map(m => ({
+  const builtIn: KpiMeta[] = getMetricDefs().map(m => ({
     id: m.id,
     label: m.label,
     unit: m.unit,
@@ -126,25 +142,34 @@ function buildAssertions(kpi: KpiMeta): AssertionDef[] {
     });
   }
 
-  // row_count: source table must have data
-  assertions.push({
-    assertionId: `${id}-row_count`,
-    kpiId: id,
-    assertionType: 'row_count',
-    severity: 'fail',
-    description: 'Source table must have data',
-    sql: `SELECT (COUNT(*) > 0) AS ok FROM sales_orders`,
-  });
+  const primaryTable = extractPrimaryTable(sql);
 
-  // freshness: source data must have records (date check)
-  assertions.push({
-    assertionId: `${id}-freshness`,
-    kpiId: id,
-    assertionType: 'freshness',
-    severity: 'warn',
-    description: 'Source data must contain date records',
-    sql: `SELECT (MAX(order_date) IS NOT NULL) AS ok FROM sales_orders`,
-  });
+  // row_count: source table must have data
+  if (primaryTable) {
+    assertions.push({
+      assertionId: `${id}-row_count`,
+      kpiId: id,
+      assertionType: 'row_count',
+      severity: 'fail',
+      description: `Source table "${primaryTable}" must have data`,
+      sql: `SELECT (COUNT(*) > 0) AS ok FROM ${primaryTable}`,
+    });
+  }
+
+  // freshness: source data must have recent records. Only emit when we know
+  // the table's date column — otherwise we'd be querying a column that may
+  // not exist on user-authored KPIs sourcing different tables.
+  if (primaryTable && FRESHNESS_TABLE_DATE_COLUMNS[primaryTable]) {
+    const dateCol = FRESHNESS_TABLE_DATE_COLUMNS[primaryTable];
+    assertions.push({
+      assertionId: `${id}-freshness`,
+      kpiId: id,
+      assertionType: 'freshness',
+      severity: 'warn',
+      description: `Source "${primaryTable}.${dateCol}" must contain date records`,
+      sql: `SELECT (MAX(${dateCol}) IS NOT NULL) AS ok FROM ${primaryTable}`,
+    });
+  }
 
   // delta_check: for percent metrics, check the value isn't an extreme outlier
   if (unit === 'percent') {

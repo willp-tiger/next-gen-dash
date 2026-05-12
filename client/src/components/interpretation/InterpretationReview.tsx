@@ -104,8 +104,8 @@ export function InterpretationReview({
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {editedConfig.metrics
             .filter((m) => m.visible)
-            .map((metric, i) => {
-              const realIndex = editedConfig.metrics.indexOf(metric);
+            .map((metric) => {
+              const realIndex = editedConfig.metrics.findIndex((m) => m.id === metric.id);
               return (
                 <div
                   key={metric.id}

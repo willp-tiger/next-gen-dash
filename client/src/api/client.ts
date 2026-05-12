@@ -122,6 +122,23 @@ export function getCategoricalMetrics(metricIds?: string[], filters?: FilterStat
   return fetchJson<CategoricalSnapshot>(`/metrics/categorical${qs ? '?' + qs : ''}`);
 }
 
+export interface HeatmapSnapshot {
+  timestamp: string;
+  rowDimension: string;
+  colDimension: string;
+  rowLabels: string[];
+  colLabels: string[];
+  grid: (number | null)[][];
+}
+
+export function getHeatmapBreakdown(row: string, col: string, filters?: FilterState) {
+  const params = new URLSearchParams();
+  params.set('row', row);
+  params.set('col', col);
+  buildFilterParams(params, filters);
+  return fetchJson<HeatmapSnapshot>(`/metrics/heatmap?${params.toString()}`);
+}
+
 export function getAvailableFilters() {
   return fetchJson<{
     productLines: string[];
@@ -240,6 +257,55 @@ export function publishKpi(userId: string, candidate: KpiCandidatePayload) {
 
 export function getPublishedKpis() {
   return fetchJson<{ kpis: PublishedKpi[] }>('/kpis/published');
+}
+
+export interface KpiDefinitionRow {
+  kpiId: string;
+  version: number;
+  displayName: string;
+  description: string;
+  unit: string;
+  chartType: string;
+  direction: 'higher-is-better' | 'lower-is-better';
+  greenMax: number;
+  yellowMax: number;
+  sqlLogic: string;
+  execSql: string | null;
+  trendSql: string | null;
+  sourceTables: string[];
+  grain: string;
+  dimensions: string[];
+  materialization: string;
+  schedule: string | null;
+  owner: string;
+  status: string;
+  createdAt: string;
+  createdBy: string;
+  changeReason: string;
+  tags: string[];
+}
+
+export interface KpiVersionRow {
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  changeReason: string;
+  status: string;
+}
+
+export interface CatalogTable {
+  catalog: string;
+  schema: string;
+  table: string;
+  columns: { name: string; type: string; description: string }[];
+}
+
+export function getKpiCatalog() {
+  return fetchJson<{ definitions: KpiDefinitionRow[]; versions: Record<string, KpiVersionRow[]> }>('/kpis/catalog');
+}
+
+export function getSchemaTables() {
+  return fetchJson<{ tables: CatalogTable[] }>('/kpis/schema');
 }
 
 export interface AssertionResult {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { MetricConfig, CategoryBreakdown } from 'shared/types';
-import { getCategoricalMetrics } from '../../api/client';
+import type { MetricConfig } from 'shared/types';
+import { getHeatmapBreakdown, type HeatmapSnapshot } from '../../api/client';
 import { formatAxis } from '../../lib/format';
 
 interface HeatMapChartProps {
@@ -30,19 +30,31 @@ function getTextColor(value: number, min: number, max: number, direction: string
   return '#991b1b';
 }
 
+const DIM_LABELS: Record<string, string> = {
+  product_line: 'Product Line',
+  country: 'Country',
+  territory: 'Territory',
+  deal_size: 'Deal Size',
+};
+
 export function HeatMapChart({ metric, onClick }: HeatMapChartProps) {
-  const [productLineBreakdown, setProductLineBreakdown] = useState<CategoryBreakdown | null>(null);
-  const [territoryBreakdown, setTerritoryBreakdown] = useState<CategoryBreakdown | null>(null);
+  const [snapshot, setSnapshot] = useState<HeatmapSnapshot | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const rowDim = metric.breakdownBy === 'territory' || metric.breakdownBy === 'country' || metric.breakdownBy === 'deal_size'
+    ? 'product_line'
+    : (metric.breakdownBy ?? 'product_line');
+  const colDim = rowDim === 'product_line' ? 'territory' : 'product_line';
 
   const fetchData = useCallback(async () => {
     try {
-      const data = await getCategoricalMetrics([metric.id], metric.filterBy || {});
-      setProductLineBreakdown(data.breakdowns.byProductLine);
-      setTerritoryBreakdown(data.breakdowns.byTerritory);
-    } catch {
-      // ignore
+      setError(null);
+      const data = await getHeatmapBreakdown(rowDim, colDim, metric.filterBy || {});
+      setSnapshot(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load heatmap');
     }
-  }, [metric.id, metric.filterBy]);
+  }, [rowDim, colDim, metric.filterBy]);
 
   useEffect(() => {
     fetchData();
@@ -50,7 +62,17 @@ export function HeatMapChart({ metric, onClick }: HeatMapChartProps) {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  if (!productLineBreakdown || !territoryBreakdown) {
+  if (error) {
+    return (
+      <div className={`metric-card p-5 ${metric.size === 'lg' ? 'col-span-2' : ''}`}>
+        <div className="flex h-40 items-center justify-center text-xs text-red-600">
+          {error}
+        </div>
+      </div>
+    );
+  }
+
+  if (!snapshot) {
     return (
       <div className={`metric-card p-5 ${metric.size === 'lg' ? 'col-span-2' : ''}`}>
         <div className="flex h-40 items-center justify-center">
@@ -60,19 +82,10 @@ export function HeatMapChart({ metric, onClick }: HeatMapChartProps) {
     );
   }
 
-  const territories = territoryBreakdown.values;
-  const productLines = productLineBreakdown.values;
-
-  const allValues: number[] = [];
-  const grid: number[][] = productLines.map((pl, mi) => {
-    return territories.map((terr, di) => {
-      const val = parseFloat(((pl.value + terr.value) / 2 + (mi * 0.3 - di * 0.2)).toFixed(1));
-      allValues.push(val);
-      return val;
-    });
-  });
-  const minVal = Math.min(...allValues);
-  const maxVal = Math.max(...allValues);
+  const { rowLabels, colLabels, grid } = snapshot;
+  const numericValues = grid.flat().filter((v): v is number => v !== null);
+  const minVal = numericValues.length ? Math.min(...numericValues) : 0;
+  const maxVal = numericValues.length ? Math.max(...numericValues) : 0;
   const dir = metric.thresholds.direction;
 
   return (
@@ -94,32 +107,38 @@ export function HeatMapChart({ metric, onClick }: HeatMapChartProps) {
           <thead>
             <tr>
               <th className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                Product Line
+                {DIM_LABELS[rowDim] ?? rowDim}
               </th>
-              {territories.map((t, i) => (
+              {colLabels.map((t, i) => (
                 <th key={i} className="px-2 py-1.5 text-center text-[10px] font-semibold text-slate-400 tracking-wider">
-                  {t.label}
+                  {t}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {productLines.map((pl, mi) => (
-              <tr key={mi}>
+            {rowLabels.map((rl, ri) => (
+              <tr key={ri}>
                 <td className="px-2.5 py-1 text-xs font-medium text-slate-700 whitespace-nowrap">
-                  {pl.label}
+                  {rl}
                 </td>
-                {grid[mi].map((val, di) => (
-                  <td key={di} className="px-1 py-1">
-                    <div
-                      className="rounded-md px-2.5 py-2 text-center text-xs font-bold transition-colors"
-                      style={{
-                        backgroundColor: getHeatColor(val, minVal, maxVal, dir),
-                        color: getTextColor(val, minVal, maxVal, dir),
-                      }}
-                    >
-                      {formatAxis(val, metric.unit)}
-                    </div>
+                {grid[ri].map((val, ci) => (
+                  <td key={ci} className="px-1 py-1">
+                    {val === null ? (
+                      <div className="rounded-md px-2.5 py-2 text-center text-xs text-slate-300 bg-slate-50">
+                        —
+                      </div>
+                    ) : (
+                      <div
+                        className="rounded-md px-2.5 py-2 text-center text-xs font-bold transition-colors"
+                        style={{
+                          backgroundColor: getHeatColor(val, minVal, maxVal, dir),
+                          color: getTextColor(val, minVal, maxVal, dir),
+                        }}
+                      >
+                        {formatAxis(val, 'dollars')}
+                      </div>
+                    )}
                   </td>
                 ))}
               </tr>

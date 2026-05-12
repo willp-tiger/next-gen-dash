@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type {
   DashboardConfig,
   MetricsSnapshot,
-  MetricValue,
   MetricConfig,
   FilterState,
   RefinementSuggestion,
@@ -14,6 +13,7 @@ import { GaugeTile } from './GaugeTile';
 import { ChartTile } from './ChartTile';
 import { BreakdownChart } from './BreakdownChart';
 import { HeatMapChart } from './HeatMapChart';
+import { EmptyMetricTile } from './EmptyMetricTile';
 import { FilterBar } from './FilterBar';
 import { RefinementBanner } from '../refinement/RefinementBanner';
 import { DashboardChat } from './DashboardChat';
@@ -32,7 +32,6 @@ interface DashboardProps {
 
 type DashboardTab = 'overview' | 'metrics';
 
-const EMPTY_VALUE: MetricValue = { current: 0, trend: [], delta: 0 };
 
 export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
   const [dashTab, setDashTab] = useState<DashboardTab>('overview');
@@ -400,7 +399,10 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
 
             {/* Top KPI summary cards */}
             {topKpis.slice(0, 3).map(metric => {
-              const val = snapshot.metrics[metric.id] ?? EMPTY_VALUE;
+              const val = snapshot.metrics[metric.id];
+              if (!val) {
+                return <EmptyMetricTile key={metric.id} metric={metric} onClick={() => setSelectedMetric(metric.id)} />;
+              }
               const status = getHealthStatus(val.current, metric.thresholds);
               const borderColor = status === 'healthy' ? 'border-l-emerald-500' : status === 'warning' ? 'border-l-amber-500' : 'border-l-red-500';
               const deltaPositive = val.delta >= 0;
@@ -439,7 +441,22 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
           {topKpis.length > 3 && (
             <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
               {topKpis.slice(3).map(metric => {
-                const val = snapshot.metrics[metric.id] ?? EMPTY_VALUE;
+                const val = snapshot.metrics[metric.id];
+                if (!val) {
+                  return (
+                    <div
+                      key={metric.id}
+                      className="metric-card p-4 cursor-pointer text-center"
+                      onClick={() => setSelectedMetric(metric.id)}
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        {metric.label}
+                      </span>
+                      <div className="mt-1.5 text-xl font-bold tracking-tight text-slate-300">—</div>
+                      <div className="mt-1 text-[10px] font-medium text-slate-400">no data</div>
+                    </div>
+                  );
+                }
                 const status = getHealthStatus(val.current, metric.thresholds);
                 const dotColor = status === 'healthy' ? 'bg-emerald-500' : status === 'warning' ? 'bg-amber-500' : 'bg-red-500';
 
@@ -476,7 +493,10 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
               </div>
               <div className={gridClass}>
                 {standardMetrics.filter(m => m.chartType !== 'number').map(metric => {
-                  const val = snapshot.metrics[metric.id] ?? EMPTY_VALUE;
+                  const val = snapshot.metrics[metric.id];
+                  if (!val) {
+                    return <EmptyMetricTile key={metric.id} metric={metric} onClick={() => setSelectedMetric(metric.id)} />;
+                  }
                   return metric.chartType === 'gauge' ? (
                     <GaugeTile key={metric.id} metric={metric} value={val} userId={userId} />
                   ) : (
@@ -515,7 +535,7 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
           {snapshot && standardMetrics.length > 0 && (
             <div className={gridClass}>
               {standardMetrics.map((metric) => {
-                const val = snapshot.metrics[metric.id] ?? EMPTY_VALUE;
+                const val = snapshot.metrics[metric.id];
                 const isChart =
                   metric.chartType === 'line' ||
                   metric.chartType === 'bar' ||
@@ -523,7 +543,9 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
                 const animClass = animatedIds.has(metric.id) ? 'animate-tile-enter' : '';
 
                 const openDetail = () => setSelectedMetric(metric.id);
-                const tile = metric.chartType === 'gauge' ? (
+                const tile = !val ? (
+                  <EmptyMetricTile key={metric.id} metric={metric} onClick={openDetail} />
+                ) : metric.chartType === 'gauge' ? (
                   <GaugeTile key={metric.id} metric={metric} value={val} userId={userId} onClick={openDetail} />
                 ) : isChart ? (
                   <ChartTile key={metric.id} metric={metric} value={val} userId={userId} onClick={openDetail} />
@@ -583,7 +605,8 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
       {selectedMetric && snapshot && (() => {
         const metric = visibleMetrics.find(m => m.id === selectedMetric);
         if (!metric) return null;
-        const val = snapshot.metrics[metric.id] ?? EMPTY_VALUE;
+        const val = snapshot.metrics[metric.id];
+        if (!val) return null;
         return (
           <MetricDetailDrawer
             metric={metric}
