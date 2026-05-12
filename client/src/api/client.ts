@@ -12,6 +12,11 @@ import type {
   PivotDimension,
   FunnelSnapshot,
   TimeseriesSnapshot,
+  WaterfallSnapshot,
+  TopNSnapshot,
+  TopNDimension,
+  BulletSnapshot,
+  CalendarSnapshot,
 } from 'shared/types';
 
 const BASE_URL = '/api';
@@ -165,6 +170,37 @@ export function getTimeseries(metricId: string, grain: 'daily' | 'weekly' | 'mon
   params.set('grain', grain);
   buildFilterParams(params, filters);
   return fetchJson<TimeseriesSnapshot>(`/widgets/timeseries?${params.toString()}`);
+}
+
+export function getWaterfall(source: 'otif_bridge', filters?: FilterState) {
+  const params = new URLSearchParams();
+  params.set('source', source);
+  buildFilterParams(params, filters);
+  return fetchJson<WaterfallSnapshot>(`/widgets/waterfall?${params.toString()}`);
+}
+
+export function getTopN(metricId: string, dimension: TopNDimension, n: number, ascending: boolean, filters?: FilterState) {
+  const params = new URLSearchParams();
+  params.set('metricId', metricId);
+  params.set('dimension', dimension);
+  params.set('n', String(n));
+  if (ascending) params.set('ascending', 'true');
+  buildFilterParams(params, filters);
+  return fetchJson<TopNSnapshot>(`/widgets/top-n?${params.toString()}`);
+}
+
+export function getBullet(metricId: string, filters?: FilterState) {
+  const params = new URLSearchParams();
+  params.set('metricId', metricId);
+  buildFilterParams(params, filters);
+  return fetchJson<BulletSnapshot>(`/widgets/bullet?${params.toString()}`);
+}
+
+export function getCalendar(source: 'shipments_per_day' | 'exceptions_per_day', filters?: FilterState) {
+  const params = new URLSearchParams();
+  params.set('source', source);
+  buildFilterParams(params, filters);
+  return fetchJson<CalendarSnapshot>(`/widgets/calendar?${params.toString()}`);
 }
 
 export function getFunnel(source: 'shipment_lifecycle', filters?: FilterState) {

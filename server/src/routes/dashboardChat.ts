@@ -137,12 +137,22 @@ router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) 
         if (newMetric.chartType === 'funnel') {
           return config.metrics.find(m => m.chartType === 'funnel' && m.funnel?.source === newMetric.funnel?.source);
         }
+        if (newMetric.chartType === 'waterfall') {
+          return config.metrics.find(m => m.chartType === 'waterfall' && m.waterfall?.source === newMetric.waterfall?.source);
+        }
+        if (newMetric.chartType === 'top_n') {
+          return config.metrics.find(m => m.id === newMetric.id && m.chartType === 'top_n'
+            && m.topN?.dimension === newMetric.topN?.dimension && m.topN?.ascending === newMetric.topN?.ascending);
+        }
+        if (newMetric.chartType === 'calendar_heatmap') {
+          return config.metrics.find(m => m.chartType === 'calendar_heatmap' && m.calendar?.source === newMetric.calendar?.source);
+        }
         if (newMetric.chartType === 'annotated_line') {
           return config.metrics.find(m => m.id === newMetric.id && m.chartType === 'annotated_line');
         }
         return config.metrics.find(m => m.id === newMetric.id
           && m.chartType === newMetric.chartType
-          && !['breakdown', 'pivot', 'funnel', 'annotated_line'].includes(m.chartType));
+          && !['breakdown', 'pivot', 'funnel', 'annotated_line', 'waterfall', 'top_n', 'calendar_heatmap'].includes(m.chartType));
       })();
       if (!isDuplicate) {
         config.metrics.push(newMetric);

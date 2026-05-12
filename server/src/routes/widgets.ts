@@ -1,12 +1,17 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import {
+  buildBulletSnapshot,
+  generateCalendar,
+  generateOtifWaterfall,
   generatePivot,
   generateShipmentFunnel,
   generateTimeseries,
+  generateTopN,
   getAnnotations,
 } from '../services/widgets.js';
-import type { FilterState, PivotDimension } from '../../../shared/types.js';
+import { generateSnapshot } from '../services/salesData.js';
+import type { FilterState, PivotDimension, TopNDimension } from '../../../shared/types.js';
 
 const router = Router();
 
@@ -69,6 +74,78 @@ router.get('/timeseries', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('Timeseries error:', err);
     res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to fetch timeseries' });
+  }
+});
+
+const VALID_TOP_N_DIMS: TopNDimension[] = ['supplier', 'customer', 'sku', 'warehouse', 'carrier', 'category'];
+
+router.get('/waterfall', async (req: Request, res: Response) => {
+  try {
+    const source = (req.query.source as string | undefined) || 'otif_bridge';
+    if (source !== 'otif_bridge') {
+      res.status(400).json({ error: `Unsupported waterfall source: ${source}` });
+      return;
+    }
+    const snapshot = await generateOtifWaterfall(parseFilters(req));
+    res.json(snapshot);
+  } catch (err) {
+    console.error('Waterfall error:', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to fetch waterfall' });
+  }
+});
+
+router.get('/top-n', async (req: Request, res: Response) => {
+  try {
+    const metricId = req.query.metricId as string | undefined;
+    const dimension = req.query.dimension as TopNDimension | undefined;
+    const n = parseInt((req.query.n as string | undefined) || '10', 10);
+    const ascending = (req.query.ascending as string | undefined) === 'true';
+    if (!metricId || !dimension) {
+      res.status(400).json({ error: 'metricId and dimension are required' });
+      return;
+    }
+    if (!VALID_TOP_N_DIMS.includes(dimension)) {
+      res.status(400).json({ error: `dimension must be one of: ${VALID_TOP_N_DIMS.join(', ')}` });
+      return;
+    }
+    const snapshot = await generateTopN(metricId, dimension, n, ascending, parseFilters(req));
+    res.json(snapshot);
+  } catch (err) {
+    console.error('TopN error:', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to fetch top-N' });
+  }
+});
+
+router.get('/bullet', async (req: Request, res: Response) => {
+  try {
+    const metricId = req.query.metricId as string | undefined;
+    if (!metricId) {
+      res.status(400).json({ error: 'metricId is required' });
+      return;
+    }
+    // Bullet needs the current value — fetch it via the standard snapshot path so all
+    // filters (including compareTo, dimensions, dates) apply consistently.
+    const snap = await generateSnapshot([metricId], parseFilters(req));
+    const actual = snap.metrics[metricId]?.current ?? 0;
+    res.json(buildBulletSnapshot(metricId, actual));
+  } catch (err) {
+    console.error('Bullet error:', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to fetch bullet' });
+  }
+});
+
+router.get('/calendar', async (req: Request, res: Response) => {
+  try {
+    const source = (req.query.source as string | undefined) || 'shipments_per_day';
+    if (source !== 'shipments_per_day' && source !== 'exceptions_per_day') {
+      res.status(400).json({ error: `Unsupported calendar source: ${source}` });
+      return;
+    }
+    const snapshot = await generateCalendar(source, parseFilters(req));
+    res.json(snapshot);
+  } catch (err) {
+    console.error('Calendar error:', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to fetch calendar' });
   }
 });
 

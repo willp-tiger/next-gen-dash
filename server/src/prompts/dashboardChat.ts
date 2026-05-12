@@ -16,6 +16,10 @@ Meridian operates 12 distribution centers across NA / EMEA / APAC / LATAM, sourc
    - **annotated_line** (trend chart with anomaly pins — APAC port congestion, SUP-0042 OTD decline, EMEA logistics incident, Cutting Tools phase-out)
    - **pivot** (a single metric across two dimensions, e.g. OTIF by region × segment, with color-coded cells)
    - **funnel** (shipment lifecycle Open → Picking → Packed → Shipped → Delivered)
+   - **waterfall** (OTIF change-decomposition bridge: Prior → On-time impact → In-full impact → Other → Current)
+   - **top_n** (ranked list with embedded data bars — top N suppliers / customers / SKUs / warehouses / carriers / categories by any metric)
+   - **bullet** (compact actual-vs-target with qualitative bands — alternative to gauge)
+   - **calendar_heatmap** (daily intensity grid: shipments per day or exceptions per day across the window)
    - **breakdown** (categorical bar chart of a metric by one dimension)
    - **markdown** (narrative text section — section headers, callouts)
 2. **Remove a metric** - Remove an existing tile
@@ -109,6 +113,69 @@ Use when the user asks for a cross-tab / heat-coded grid of a metric across two 
     "thresholds": { "green": { "max": 0 }, "yellow": { "max": 0 }, "direction": "higher-is-better" },
     "visible": true,
     "funnel": { "source": "shipment_lifecycle" }
+  }
+}
+
+### Add an OTIF waterfall (change-decomposition bridge)
+{
+  "message": "I've added an OTIF waterfall — you'll see the on-time vs in-full breakdown vs prior period.",
+  "action": "add",
+  "metric": {
+    "id": "otif_rate",
+    "label": "OTIF Bridge",
+    "unit": "percent",
+    "chartType": "waterfall",
+    "size": "lg",
+    "thresholds": { "green": { "max": 95 }, "yellow": { "max": 85 }, "direction": "higher-is-better" },
+    "visible": true,
+    "waterfall": { "source": "otif_bridge" }
+  }
+}
+
+### Add a Top-N list with data bars
+{
+  "message": "I've added a top 10 suppliers by OTD.",
+  "action": "add",
+  "metric": {
+    "id": "supplier_otd",
+    "label": "Suppliers by OTD",
+    "unit": "percent",
+    "chartType": "top_n",
+    "size": "md",
+    "thresholds": { "green": { "max": 92 }, "yellow": { "max": 85 }, "direction": "higher-is-better" },
+    "visible": true,
+    "topN": { "dimension": "supplier", "n": 10, "ascending": false }
+  }
+}
+
+### Add a bullet chart (compact actual vs target)
+{
+  "message": "I've added an OTIF bullet — actual vs target with bands.",
+  "action": "add",
+  "metric": {
+    "id": "otif_rate",
+    "label": "OTIF",
+    "unit": "percent",
+    "chartType": "bullet",
+    "size": "md",
+    "thresholds": { "green": { "max": 95 }, "yellow": { "max": 85 }, "direction": "higher-is-better" },
+    "visible": true
+  }
+}
+
+### Add a calendar heatmap
+{
+  "message": "I've added a daily-shipments calendar heatmap for the window.",
+  "action": "add",
+  "metric": {
+    "id": "otif_rate",
+    "label": "Shipments per Day",
+    "unit": "count",
+    "chartType": "calendar_heatmap",
+    "size": "lg",
+    "thresholds": { "green": { "max": 0 }, "yellow": { "max": 0 }, "direction": "higher-is-better" },
+    "visible": true,
+    "calendar": { "source": "shipments_per_day" }
   }
 }
 

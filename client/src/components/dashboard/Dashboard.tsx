@@ -15,6 +15,10 @@ import { ScorecardTile } from './ScorecardTile';
 import { AnnotatedLineTile } from './AnnotatedLineTile';
 import { PivotTile } from './PivotTile';
 import { FunnelTile } from './FunnelTile';
+import { WaterfallTile } from './WaterfallTile';
+import { TopNTile } from './TopNTile';
+import { BulletTile } from './BulletTile';
+import { CalendarHeatmapTile } from './CalendarHeatmapTile';
 import { BreakdownChart } from './BreakdownChart';
 import { HeatMapChart } from './HeatMapChart';
 import { EmptyMetricTile } from './EmptyMetricTile';
@@ -105,7 +109,10 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    const SELF_FETCHING = new Set(['breakdown', 'heatmap', 'pivot', 'annotated_line', 'funnel', 'markdown']);
+    const SELF_FETCHING = new Set([
+      'breakdown', 'heatmap', 'pivot', 'annotated_line', 'funnel', 'markdown',
+      'waterfall', 'top_n', 'bullet', 'calendar_heatmap',
+    ]);
     const ids = activeConfig.metrics
       .filter((m) => m.visible && !SELF_FETCHING.has(m.chartType))
       .map((m) => m.id);
@@ -232,6 +239,19 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
 
   const sections = activeConfig.layout?.sections;
 
+  // Composite key for tiles. A user can have multiple widgets that share the same metric id
+  // (e.g. scorecard + waterfall + bullet for OTIF), so id alone collides in React keys.
+  const tileKey = (metric: MetricConfig): string => {
+    const parts = [metric.id, metric.chartType, String(metric.position)];
+    if (metric.breakdownBy) parts.push(`bb:${metric.breakdownBy}`);
+    if (metric.pivot) parts.push(`pv:${metric.pivot.rowDim}x${metric.pivot.colDim}`);
+    if (metric.topN) parts.push(`tn:${metric.topN.dimension}:${metric.topN.n}:${metric.topN.ascending ? 'a' : 'd'}`);
+    if (metric.calendar) parts.push(`cal:${metric.calendar.source}`);
+    if (metric.funnel) parts.push(`fn:${metric.funnel.source}`);
+    if (metric.waterfall) parts.push(`wf:${metric.waterfall.source}`);
+    return parts.join('|');
+  };
+
   // Unified tile dispatch: takes a metric and renders the right widget.
   const renderTile = (metric: MetricConfig) => {
     const openDetail = () => setSelectedMetric(metric.id);
@@ -255,6 +275,22 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
 
     if (metric.chartType === 'funnel') {
       return <FunnelTile metric={metric} filters={filters} onClick={openDetail} />;
+    }
+
+    if (metric.chartType === 'waterfall') {
+      return <WaterfallTile metric={metric} filters={filters} onClick={openDetail} />;
+    }
+
+    if (metric.chartType === 'top_n') {
+      return <TopNTile metric={metric} filters={filters} onClick={openDetail} />;
+    }
+
+    if (metric.chartType === 'bullet') {
+      return <BulletTile metric={metric} filters={filters} onClick={openDetail} />;
+    }
+
+    if (metric.chartType === 'calendar_heatmap') {
+      return <CalendarHeatmapTile metric={metric} filters={filters} onClick={openDetail} />;
     }
 
     if (metric.chartType === 'breakdown' || metric.chartType === 'heatmap') {
@@ -565,7 +601,7 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
                 {standardMetrics
                   .filter(m => m.chartType !== 'number' && m.chartType !== 'scorecard')
                   .map(metric => (
-                    <div key={metric.id}>{renderTile(metric)}</div>
+                    <div key={tileKey(metric)}>{renderTile(metric)}</div>
                   ))}
               </div>
             </>
@@ -579,7 +615,7 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
               </div>
               <div className={gridClass}>
                 {breakdownMetrics.map((metric) => (
-                  <div key={`${metric.id}-${metric.breakdownBy ?? metric.chartType}`}>{renderTile(metric)}</div>
+                  <div key={tileKey(metric)}>{renderTile(metric)}</div>
                 ))}
               </div>
             </>
@@ -609,7 +645,7 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
                     {sectionMetrics.map(metric => {
                       const animClass = animatedIds.has(metric.id) ? 'animate-tile-enter' : '';
                       return (
-                        <div key={metric.id} className={animClass}>
+                        <div key={tileKey(metric)} className={animClass}>
                           {renderTile(metric)}
                         </div>
                       );
@@ -625,7 +661,7 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
                   {standardMetrics.map((metric) => {
                     const animClass = animatedIds.has(metric.id) ? 'animate-tile-enter' : '';
                     return (
-                      <div key={metric.id} className={animClass}>
+                      <div key={tileKey(metric)} className={animClass}>
                         {renderTile(metric)}
                       </div>
                     );
@@ -640,7 +676,7 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
                   </div>
                   <div className={gridClass}>
                     {breakdownMetrics.map((metric) => (
-                      <div key={`${metric.id}-${metric.breakdownBy ?? metric.chartType}`}>
+                      <div key={tileKey(metric)}>
                         {renderTile(metric)}
                       </div>
                     ))}

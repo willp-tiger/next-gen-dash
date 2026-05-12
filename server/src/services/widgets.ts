@@ -4,11 +4,16 @@ import type { MetricDefinition } from './kpiDefinitionStore.js';
 import { TODAY } from './supplyChain/random.js';
 import type {
   AnnotationEvent,
+  BulletSnapshot,
+  CalendarSnapshot,
   FilterState,
   FunnelSnapshot,
   PivotDimension,
   PivotSnapshot,
   TimeseriesSnapshot,
+  TopNDimension,
+  TopNSnapshot,
+  WaterfallSnapshot,
 } from '../../../shared/types.js';
 
 // === Annotations ===
@@ -283,4 +288,373 @@ export async function generateTimeseries(
   const annotations = all.filter(a => !a.affectsMetrics || a.affectsMetrics.length === 0 || a.affectsMetrics.includes(metricId));
 
   return { metricId, grain, points, annotations };
+}
+
+// === Waterfall (OTIF bridge) ===
+//
+// Decomposes the change in OTIF between a prior window and the current window into three
+// drivers: on-time rate, in-full rate, and a residual catch-all (interaction + exception
+// effect). The math is intentionally simple — the prior + impacts = current identity is
+// closed by absorbing the cross-term into "Other" — but the chart tells the right story
+// directionally and reads correctly to a CSCO audience.
+
+interface OtifComponents {
+  total: number;
+  otifCount: number;
+  onTimeCount: number;
+  inFullCount: number;
+  otifRate: number;
+  onTimeRate: number;
+  inFullRate: number;
+}
+
+async function queryOtifComponents(filters?: FilterState): Promise<OtifComponents> {
+  const where = buildShipmentWhere(filters);
+  const sql = `
+    SELECT
+      COUNT(*) AS total,
+      COUNT(*) FILTER (WHERE s.delivered_date IS NOT NULL AND s.delivered_date <= s.promised_date) AS on_time_count,
+      COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM shipment_lines slx WHERE slx.shipment_id = s.shipment_id AND COALESCE(slx.qty_backordered, 0) > 0)) AS in_full_count,
+      COUNT(*) FILTER (
+        WHERE s.delivered_date IS NOT NULL
+          AND s.delivered_date <= s.promised_date
+          AND NOT EXISTS (SELECT 1 FROM shipment_lines slx WHERE slx.shipment_id = s.shipment_id AND COALESCE(slx.qty_backordered, 0) > 0)
+      ) AS otif_count
+    FROM shipments s
+    ${where.sql}
+  `;
+  const { rows } = await pool.query(sql, where.params);
+  const r = rows[0] || {};
+  const total = parseInt(r.total || '0', 10);
+  const otifCount = parseInt(r.otif_count || '0', 10);
+  const onTimeCount = parseInt(r.on_time_count || '0', 10);
+  const inFullCount = parseInt(r.in_full_count || '0', 10);
+  return {
+    total,
+    otifCount,
+    onTimeCount,
+    inFullCount,
+    otifRate: total > 0 ? (otifCount / total) * 100 : 0,
+    onTimeRate: total > 0 ? (onTimeCount / total) * 100 : 0,
+    inFullRate: total > 0 ? (inFullCount / total) * 100 : 0,
+  };
+}
+
+function priorWindow(filters?: FilterState): FilterState {
+  // If a date range is set, mirror it backwards. Otherwise default to "same length immediately
+  // before" the seeded TODAY — a 30-day prior window.
+  if (filters?.dateStart && filters?.dateEnd) {
+    const start = new Date(filters.dateStart);
+    const end = new Date(filters.dateEnd);
+    const days = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+    const priorEnd = new Date(start); priorEnd.setDate(priorEnd.getDate() - 1);
+    const priorStart = new Date(priorEnd); priorStart.setDate(priorStart.getDate() - (days - 1));
+    return {
+      ...filters,
+      dateStart: priorStart.toISOString().slice(0, 10),
+      dateEnd: priorEnd.toISOString().slice(0, 10),
+    };
+  }
+  // Default: last 30 days vs the 30 days before that.
+  const end = new Date(TODAY); end.setDate(end.getDate() - 30);
+  const start = new Date(end); start.setDate(start.getDate() - 29);
+  return {
+    ...filters,
+    dateStart: start.toISOString().slice(0, 10),
+    dateEnd: end.toISOString().slice(0, 10),
+  };
+}
+
+export async function generateOtifWaterfall(filters?: FilterState): Promise<WaterfallSnapshot> {
+  const [current, prior] = await Promise.all([
+    queryOtifComponents(filters),
+    queryOtifComponents(priorWindow(filters)),
+  ]);
+
+  const onTimeImpact = current.onTimeRate - prior.onTimeRate;
+  const inFullImpact = current.inFullRate - prior.inFullRate;
+  const netDelta = current.otifRate - prior.otifRate;
+  // The cross-term and any residual (e.g. exception coupling) lands in 'Other' so the
+  // bridge closes exactly. This is the standard "interaction effect" in a multiplicative
+  // decomposition: ΔOTIF != ΔOnTime + ΔInFull when OTIF = OnTime AND InFull.
+  const otherImpact = netDelta - onTimeImpact - inFullImpact;
+
+  let running = prior.otifRate;
+  const stages: WaterfallSnapshot['stages'] = [
+    { label: 'Prior',     kind: 'anchor',   value: prior.otifRate,   runningTotal: running },
+  ];
+  running += onTimeImpact;
+  stages.push({ label: 'On-time', kind: onTimeImpact >= 0 ? 'positive' : 'negative', value: onTimeImpact, runningTotal: running });
+  running += inFullImpact;
+  stages.push({ label: 'In-full', kind: inFullImpact >= 0 ? 'positive' : 'negative', value: inFullImpact, runningTotal: running });
+  running += otherImpact;
+  stages.push({ label: 'Other',   kind: otherImpact >= 0 ? 'positive' : 'negative', value: otherImpact, runningTotal: running });
+  stages.push({ label: 'Current', kind: 'anchor',   value: current.otifRate, runningTotal: current.otifRate });
+
+  return {
+    source: 'otif_bridge',
+    unit: 'percent',
+    netDelta: parseFloat(netDelta.toFixed(2)),
+    stages: stages.map(s => ({
+      ...s,
+      value: parseFloat(s.value.toFixed(2)),
+      runningTotal: parseFloat(s.runningTotal.toFixed(2)),
+    })),
+  };
+}
+
+// === Top-N ===
+//
+// Rank labels along a dimension by a metric. Most metrics are shipment-based and rank fine
+// off the standard shipments → dimension joins; procurement metrics (supplier_otd, supplier_otif,
+// po_cycle_time, supplier_defect_rate, avg_lead_time) need to query purchase_orders instead so
+// the per-row value reflects the supplier's real OTD/lead-time rather than shipment value.
+
+interface TopNQuery {
+  baseTable: 'shipments' | 'purchase_orders';
+  joinClause: string;
+  idExpr: string;
+  labelExpr: string;
+  valueExpr: string;
+  whereClause: string;
+  /** Minimum row count per group for the value to be considered statistically meaningful. */
+  minGroupCount: number;
+}
+
+function buildPoWhere(filters?: FilterState): { sql: string; params: unknown[] } {
+  const conds: string[] = [];
+  const params: unknown[] = [];
+  let p = 1;
+  if (filters?.warehouse_id) { conds.push(`po.warehouse_id = $${p++}`); params.push(filters.warehouse_id); }
+  if (filters?.dateStart) { conds.push(`po.ordered_date >= $${p++}`); params.push(filters.dateStart); }
+  if (filters?.dateEnd) { conds.push(`po.ordered_date <= $${p++}`); params.push(filters.dateEnd); }
+  if (filters?.sku_category) { conds.push(`po.sku_id IN (SELECT sku_id FROM skus WHERE category = $${p++})`); params.push(filters.sku_category); }
+  if (filters?.supplier_tier) { conds.push(`po.supplier_id IN (SELECT supplier_id FROM suppliers WHERE tier = $${p++})`); params.push(filters.supplier_tier); }
+  return { sql: conds.length ? `WHERE ${conds.join(' AND ')}` : '', params };
+}
+
+function buildTopNQuery(metricId: string, dimension: TopNDimension, filters?: FilterState):
+  { query: TopNQuery; params: unknown[] } {
+  // === Procurement metrics: rank by per-group OTD/lead-time/defect from purchase_orders ===
+  const procurementMetrics = ['supplier_otd', 'supplier_otif', 'po_cycle_time', 'avg_lead_time', 'supplier_defect_rate'];
+  if (procurementMetrics.includes(metricId)) {
+    const where = buildPoWhere(filters);
+    let valueExpr = '';
+    let joinExtra = '';
+    if (metricId === 'supplier_otd') {
+      valueExpr = `100.0 * COUNT(*) FILTER (WHERE po.received_date <= po.promised_date) / NULLIF(COUNT(*) FILTER (WHERE po.received_date IS NOT NULL), 0)`;
+    } else if (metricId === 'supplier_otif') {
+      valueExpr = `100.0 * COUNT(*) FILTER (WHERE po.received_date <= po.promised_date AND po.qty_received >= po.qty_ordered) / NULLIF(COUNT(*) FILTER (WHERE po.received_date IS NOT NULL), 0)`;
+    } else if (metricId === 'po_cycle_time') {
+      valueExpr = `AVG(po.received_date - po.ordered_date) FILTER (WHERE po.received_date IS NOT NULL)`;
+    } else if (metricId === 'avg_lead_time') {
+      valueExpr = `AVG(po.promised_date - po.ordered_date) FILTER (WHERE po.status <> 'Cancelled')`;
+    } else if (metricId === 'supplier_defect_rate') {
+      valueExpr = `100.0 * COUNT(DISTINCT po.po_id) FILTER (WHERE EXISTS (SELECT 1 FROM exceptions e WHERE e.po_id = po.po_id AND e.reason_code = 'Quality Hold')) / NULLIF(COUNT(DISTINCT po.po_id), 0)`;
+    }
+
+    const dimSpec = (() => {
+      switch (dimension) {
+        case 'supplier':
+          return { join: 'JOIN suppliers sup ON sup.supplier_id = po.supplier_id', id: 'sup.supplier_id', label: 'sup.name' };
+        case 'sku':
+          return { join: 'JOIN skus sk ON sk.sku_id = po.sku_id', id: 'sk.sku_id', label: 'sk.name' };
+        case 'category':
+          return { join: 'JOIN skus sk ON sk.sku_id = po.sku_id', id: 'sk.category', label: 'sk.category' };
+        case 'warehouse':
+          return { join: 'JOIN warehouses w ON w.warehouse_id = po.warehouse_id', id: 'w.warehouse_id', label: 'w.name' };
+        default:
+          // customer / carrier don't naturally apply to inbound POs; fall back to supplier ranking.
+          return { join: 'JOIN suppliers sup ON sup.supplier_id = po.supplier_id', id: 'sup.supplier_id', label: 'sup.name' };
+      }
+    })();
+
+    return {
+      query: {
+        baseTable: 'purchase_orders',
+        joinClause: `${dimSpec.join} ${joinExtra}`.trim(),
+        idExpr: dimSpec.id,
+        labelExpr: dimSpec.label,
+        valueExpr,
+        whereClause: where.sql,
+        minGroupCount: 5,  // require ≥5 POs per supplier so a 1-row supplier doesn't score 100%
+      },
+      params: where.params,
+    };
+  }
+
+  // === Default: shipment-based metrics ===
+  const def = getMetricDefs().find(d => d.id === metricId)!;
+  const { valueExpr } = pivotValueExprFor(def);
+  const where = buildShipmentWhere(filters);
+
+  const dimSpec = (() => {
+    switch (dimension) {
+      case 'supplier':
+        return { join: 'JOIN shipment_lines sl ON sl.shipment_id = s.shipment_id JOIN skus sk ON sk.sku_id = sl.sku_id JOIN suppliers sup ON sup.supplier_id = sk.primary_supplier_id', id: 'sup.supplier_id', label: 'sup.name' };
+      case 'customer':
+        return { join: 'JOIN customers c ON c.customer_id = s.customer_id', id: 'c.customer_id', label: 'c.name' };
+      case 'sku':
+        return { join: 'JOIN shipment_lines sl ON sl.shipment_id = s.shipment_id JOIN skus sk ON sk.sku_id = sl.sku_id', id: 'sk.sku_id', label: 'sk.name' };
+      case 'warehouse':
+        return { join: 'JOIN warehouses w ON w.warehouse_id = s.warehouse_id', id: 'w.warehouse_id', label: 'w.name' };
+      case 'carrier':
+        return { join: 'JOIN carriers cr ON cr.carrier_id = s.carrier_id', id: 'cr.carrier_id', label: 'cr.name' };
+      case 'category':
+        return { join: 'JOIN shipment_lines sl ON sl.shipment_id = s.shipment_id JOIN skus sk ON sk.sku_id = sl.sku_id', id: 'sk.category', label: 'sk.category' };
+    }
+  })();
+
+  return {
+    query: {
+      baseTable: 'shipments',
+      joinClause: dimSpec.join,
+      idExpr: dimSpec.id,
+      labelExpr: dimSpec.label,
+      valueExpr,
+      whereClause: where.sql,
+      minGroupCount: 1,
+    },
+    params: where.params,
+  };
+}
+
+export async function generateTopN(
+  metricId: string,
+  dimension: TopNDimension,
+  n: number,
+  ascending: boolean,
+  filters?: FilterState
+): Promise<TopNSnapshot> {
+  const def = getMetricDefs().find(d => d.id === metricId);
+  if (!def) throw new Error(`Unknown metric: ${metricId}`);
+
+  const { query: q, params } = buildTopNQuery(metricId, dimension, filters);
+  const direction = ascending ? 'ASC' : 'DESC';
+  const limit = Math.max(1, Math.min(50, Math.floor(n) || 10));
+
+  const baseAlias = q.baseTable === 'purchase_orders' ? 'po' : 's';
+  const sql = `
+    SELECT ${q.idExpr} AS id, ${q.labelExpr} AS label, ${q.valueExpr} AS value
+    FROM ${q.baseTable} ${baseAlias}
+    ${q.joinClause}
+    ${q.whereClause}
+    GROUP BY ${q.idExpr}, ${q.labelExpr}
+    HAVING COUNT(*) >= ${q.minGroupCount}
+    ORDER BY value ${direction} NULLS LAST
+    LIMIT ${limit}
+  `;
+
+  const { rows } = await pool.query(sql, params);
+  const numeric = rows.map((r: { id: string; label: string; value: string }) => ({
+    id: String(r.id),
+    label: String(r.label),
+    raw: parseFloat(r.value),
+  })).filter((r: { raw: number }) => Number.isFinite(r.raw));
+
+  const max = numeric.length > 0 ? Math.max(...numeric.map((r: { raw: number }) => Math.abs(r.raw))) : 0;
+  const result: TopNSnapshot['rows'] = numeric.map((r: { id: string; label: string; raw: number }, i: number) => ({
+    rank: i + 1,
+    id: r.id,
+    label: r.label,
+    value: parseFloat(r.raw.toFixed(2)),
+    share: max > 0 ? parseFloat((Math.abs(r.raw) / max).toFixed(3)) : 0,
+  }));
+
+  return { metricId, dimension, ascending, rows: result };
+}
+
+// === Bullet (snapshot-only, no SQL) ===
+//
+// Bullet derives its bands from the metric's existing thresholds and uses the current value
+// from /api/metrics. No new query is needed; the snapshot endpoint just composes the bands
+// from the published KPI definition so the client doesn't need to know the config schema.
+
+export function buildBulletSnapshot(metricId: string, actual: number): BulletSnapshot {
+  const def = getMetricDefs().find(d => d.id === metricId);
+  if (!def) throw new Error(`Unknown metric: ${metricId}`);
+
+  const direction = def.direction;
+  const greenMax = def.greenMax;
+  const yellowMax = def.yellowMax;
+
+  // Bands ascend in display order. The "max" of the last band is the chart's right edge.
+  // We pick a chart max of max(actual, yellowMax) * 1.25 for higher-is-better so the bands
+  // give comparable visual weight; for lower-is-better the chart max is similar.
+  const chartMax = Math.max(actual, yellowMax, greenMax) * 1.25;
+
+  const bands: BulletSnapshot['bands'] = direction === 'lower-is-better'
+    ? [
+        { max: greenMax,  color: 'healthy'  },
+        { max: yellowMax, color: 'warning'  },
+        { max: chartMax,  color: 'critical' },
+      ]
+    : [
+        { max: yellowMax, color: 'critical' },
+        { max: greenMax,  color: 'warning'  },
+        { max: chartMax,  color: 'healthy'  },
+      ];
+
+  return {
+    metricId,
+    actual: parseFloat(actual.toFixed(2)),
+    target: greenMax,
+    bands,
+    direction,
+  };
+}
+
+// === Calendar heatmap ===
+
+export async function generateCalendar(
+  source: 'shipments_per_day' | 'exceptions_per_day',
+  filters?: FilterState
+): Promise<CalendarSnapshot> {
+  // Default to last 365 days when no filter range is set.
+  const today = new Date(TODAY);
+  const defaultEnd = today.toISOString().slice(0, 10);
+  const defaultStartD = new Date(today); defaultStartD.setDate(defaultStartD.getDate() - 364);
+  const defaultStart = defaultStartD.toISOString().slice(0, 10);
+
+  const dateStart = filters?.dateStart || defaultStart;
+  const dateEnd = filters?.dateEnd || defaultEnd;
+
+  // Re-apply dimension filters (region, warehouse, etc.) on top of the date range, but
+  // anchor the date range explicitly so the heatmap always spans a full window even when
+  // no date filter is otherwise set.
+  const anchoredFilters: FilterState = { ...filters, dateStart, dateEnd };
+  const where = buildShipmentWhere(anchoredFilters);
+
+  let sql: string;
+  if (source === 'exceptions_per_day') {
+    // Exceptions linked to shipments matching the filter; use event_date as the day key.
+    sql = `
+      SELECT e.event_date::date AS d, COUNT(*) AS value
+      FROM exceptions e
+      JOIN shipments s ON s.shipment_id = e.shipment_id
+      ${where.sql}
+      GROUP BY e.event_date::date
+      ORDER BY e.event_date::date
+    `;
+  } else {
+    sql = `
+      SELECT s.order_date::date AS d, COUNT(*) AS value
+      FROM shipments s
+      ${where.sql}
+      GROUP BY s.order_date::date
+      ORDER BY s.order_date::date
+    `;
+  }
+
+  const { rows } = await pool.query(sql, where.params);
+  const cells = rows.map((r: { d: Date | string; value: string }) => {
+    const d = r.d instanceof Date ? r.d : new Date(r.d);
+    return { date: d.toISOString().slice(0, 10), value: parseInt(r.value || '0', 10) };
+  });
+
+  const values = cells.map((c: { value: number }) => c.value);
+  const min = values.length > 0 ? Math.min(...values) : 0;
+  const max = values.length > 0 ? Math.max(...values) : 0;
+
+  return { source, dateStart, dateEnd, cells, min, max };
 }

@@ -50,7 +50,14 @@ export type ChartType =
   | 'annotated_line'
   | 'pivot'
   | 'funnel'
-  | 'markdown';
+  | 'markdown'
+  | 'waterfall'
+  | 'top_n'
+  | 'bullet'
+  | 'calendar_heatmap';
+
+export type TopNDimension =
+  | 'supplier' | 'customer' | 'sku' | 'warehouse' | 'carrier' | 'category';
 
 export type PivotDimension =
   | 'category' | 'destination_region' | 'warehouse_id'
@@ -74,6 +81,12 @@ export interface MetricConfig {
   pivot?: { rowDim: PivotDimension; colDim: PivotDimension };
   /** Funnel widget config: which lifecycle to render. */
   funnel?: { source: 'shipment_lifecycle' };
+  /** Waterfall widget config: which prior-vs-current bridge to render. */
+  waterfall?: { source: 'otif_bridge' };
+  /** Top-N widget config: rank labels along a dimension by the metric value. */
+  topN?: { dimension: TopNDimension; n: number; ascending?: boolean };
+  /** Calendar heatmap config: how to aggregate daily values. */
+  calendar?: { source: 'shipments_per_day' | 'exceptions_per_day' };
   /** Optional explicit target (when not derivable from green threshold). */
   target?: number;
   /** Markdown widget body (only used when chartType === 'markdown'). */
@@ -244,6 +257,70 @@ export interface TimeseriesSnapshot {
   grain: 'daily' | 'weekly' | 'monthly';
   points: TimeseriesPoint[];
   annotations: AnnotationEvent[];
+}
+
+export interface WaterfallStage {
+  /** Short label for the column ('Prior', 'On-time', 'In-full', 'Exceptions', 'Current'). */
+  label: string;
+  /** 'anchor' for start/end columns; 'positive' / 'negative' for impact columns. */
+  kind: 'anchor' | 'positive' | 'negative';
+  /** For anchors: the absolute value. For impacts: the signed delta in absolute units. */
+  value: number;
+  /** Cumulative running total for layout (anchors equal value; impacts shift it). */
+  runningTotal: number;
+}
+
+export interface WaterfallSnapshot {
+  source: 'otif_bridge';
+  /** Units of the bridge values (e.g. 'percent' for OTIF). */
+  unit: string;
+  /** Sum of impacts (signed). Should equal current - prior. */
+  netDelta: number;
+  stages: WaterfallStage[];
+}
+
+export interface TopNRow {
+  rank: number;
+  /** Stable id (e.g. supplier_id). */
+  id: string;
+  /** Display label. */
+  label: string;
+  value: number;
+  /** 0..1 share of max across the returned rows, for the data bar. */
+  share: number;
+}
+
+export interface TopNSnapshot {
+  metricId: string;
+  dimension: TopNDimension;
+  ascending: boolean;
+  rows: TopNRow[];
+}
+
+export interface BulletSnapshot {
+  metricId: string;
+  /** Current value. */
+  actual: number;
+  /** Target (typically the green threshold). */
+  target: number;
+  /** Qualitative bands in display order. Each band has a maximum and a color hint. */
+  bands: { max: number; color: 'critical' | 'warning' | 'healthy' }[];
+  direction: 'higher-is-better' | 'lower-is-better';
+}
+
+export interface CalendarCell {
+  date: string;            // YYYY-MM-DD
+  value: number;
+}
+
+export interface CalendarSnapshot {
+  source: 'shipments_per_day' | 'exceptions_per_day';
+  /** Inclusive date range covered. */
+  dateStart: string;
+  dateEnd: string;
+  cells: CalendarCell[];
+  min: number;
+  max: number;
 }
 
 // === API Request/Response Types ===
