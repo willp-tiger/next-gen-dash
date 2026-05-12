@@ -38,18 +38,46 @@ export interface Priority {
   reasoning: string;
 }
 
+export type ChartType =
+  | 'number'
+  | 'line'
+  | 'bar'
+  | 'area'
+  | 'gauge'
+  | 'breakdown'
+  | 'heatmap'
+  | 'scorecard'
+  | 'annotated_line'
+  | 'pivot'
+  | 'funnel'
+  | 'markdown';
+
+export type PivotDimension =
+  | 'category' | 'destination_region' | 'warehouse_id'
+  | 'customer_segment' | 'abc_class' | 'supplier_tier';
+
 export interface MetricConfig {
   id: string;
   label: string;
   unit: string;
-  chartType: 'number' | 'line' | 'bar' | 'area' | 'gauge' | 'breakdown' | 'heatmap';
+  chartType: ChartType;
   size: 'sm' | 'md' | 'lg';
   thresholds: ThresholdConfig;
   position: number;
   visible: boolean;
   reasoning?: string;
-  breakdownBy?: 'category' | 'destination_region' | 'warehouse_id' | 'customer_segment' | 'abc_class' | 'supplier_tier';
+  breakdownBy?: PivotDimension;
   filterBy?: FilterState;
+  /** Section the tile belongs to. Matches LayoutConfig.sections[].id. */
+  sectionId?: string;
+  /** Pivot widget config: rows × cols of a metric. */
+  pivot?: { rowDim: PivotDimension; colDim: PivotDimension };
+  /** Funnel widget config: which lifecycle to render. */
+  funnel?: { source: 'shipment_lifecycle' };
+  /** Optional explicit target (when not derivable from green threshold). */
+  target?: number;
+  /** Markdown widget body (only used when chartType === 'markdown'). */
+  markdown?: string;
 }
 
 export interface ThresholdConfig {
@@ -58,9 +86,19 @@ export interface ThresholdConfig {
   direction: 'lower-is-better' | 'higher-is-better';
 }
 
+export interface SectionConfig {
+  id: string;
+  label: string;
+  description?: string;
+  /** Optional column override for this section (otherwise inherits LayoutConfig.columns). */
+  columns?: 2 | 3 | 4;
+}
+
 export interface LayoutConfig {
   columns: 2 | 3 | 4;
   showCanonicalToggle: boolean;
+  /** Optional named sections; if absent, the dashboard renders as a flat grid. */
+  sections?: SectionConfig[];
 }
 
 // === Metrics Data ===
@@ -74,6 +112,14 @@ export interface MetricValue {
   current: number;
   trend: number[];
   delta: number;
+  /** Optional comparison vs prior period / prior year, populated when FilterState.compareTo is set. */
+  comparison?: {
+    previous: number;
+    deltaAbs: number;
+    deltaPct: number;
+    basis: 'prior_period' | 'prior_year';
+    basisLabel: string;
+  };
 }
 
 // === Interaction Tracking ===
@@ -107,6 +153,8 @@ export interface FilterState {
   // ISO date strings (YYYY-MM-DD). Inclusive date range applied per fact table's natural date column.
   dateStart?: string;
   dateEnd?: string;
+  /** Comparison basis for scorecards. 'none' (default) skips the comparison query. */
+  compareTo?: 'none' | 'prior_period' | 'prior_year';
 }
 
 export interface CategoryBreakdown {
@@ -144,6 +192,59 @@ export type SupplierTier = (typeof SUPPLIER_TIERS)[number];
 
 export const ABC_CLASSES = ['A', 'B', 'C'] as const;
 export type AbcClass = (typeof ABC_CLASSES)[number];
+
+// === Widget data shapes ===
+
+export interface AnnotationEvent {
+  id: string;
+  /** ISO date or date range start (YYYY-MM-DD). */
+  date: string;
+  /** ISO date for the end of the window (omit for point events). */
+  endDate?: string;
+  label: string;
+  description: string;
+  severity: 'info' | 'warning' | 'critical';
+  /** Optional metric IDs this annotation is most relevant to. Empty = applies broadly. */
+  affectsMetrics?: string[];
+}
+
+export interface PivotSnapshot {
+  metricId: string;
+  rowDim: PivotDimension;
+  colDim: PivotDimension;
+  rowLabels: string[];
+  colLabels: string[];
+  /** [row][col] value or null when no data. */
+  grid: (number | null)[][];
+  /** Min/max across non-null cells (for color scaling). */
+  min: number;
+  max: number;
+}
+
+export interface FunnelStage {
+  stage: string;
+  count: number;
+  /** Cumulative drop-off vs. the first stage, expressed as a percentage. */
+  dropoffPct: number;
+}
+
+export interface FunnelSnapshot {
+  source: 'shipment_lifecycle';
+  stages: FunnelStage[];
+}
+
+export interface TimeseriesPoint {
+  /** ISO date (YYYY-MM-DD). */
+  date: string;
+  value: number;
+}
+
+export interface TimeseriesSnapshot {
+  metricId: string;
+  grain: 'daily' | 'weekly' | 'monthly';
+  points: TimeseriesPoint[];
+  annotations: AnnotationEvent[];
+}
 
 // === API Request/Response Types ===
 

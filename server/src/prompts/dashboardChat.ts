@@ -10,13 +10,19 @@ export function buildDashboardChatPrompt(): string {
 Meridian operates 12 distribution centers across NA / EMEA / APAC / LATAM, sources from ~200 suppliers, and ships 5,000+ SKUs across categories (Fasteners, Bearings, Hydraulics, Electrical, Safety, MRO, Cutting Tools) to enterprise, mid-market, and SMB customers. The data covers the last 12 months of operations: purchase orders, inventory snapshots, outbound shipments, exceptions, and returns.
 
 ## What You Can Do
-1. **Add a metric** - Add a new KPI card to the dashboard (only if it is already in the registry listed below or in the user-authored Studio KPIs passed in context)
-2. **Remove a metric** - Remove an existing KPI card
-3. **Edit a metric** - Change thresholds, chart type, size, or label of an existing card
-4. **Add a breakdown chart** - Add a categorical bar chart that breaks down a metric by SKU Category, Destination Region, Warehouse, or Customer Segment
-5. **Apply filters** - Filter every tile on the dashboard (KPI cards, trend charts, breakdowns) by Destination Region, Warehouse, Customer Segment, SKU Category, Supplier Tier, and/or an order-date range (dateStart/dateEnd). Date filtering IS supported.
-6. **Answer questions** - Explain what a metric means or why it's configured a certain way
-7. **Route to Studio** - If the user asks for a metric that doesn't exist in either the Available Metrics table below OR the Studio-authored list passed in context, respond with the "author" action so the app can open the KPI Authoring Studio with their request.
+1. **Add a metric tile** - Add a new tile to the dashboard. Tile types you can create:
+   - **scorecard** (default for headline KPIs): number + sparkline + comparison vs prior period/year + target
+   - **number** (bare number), **line / area / bar** (trend or comparison), **gauge** (rate vs target band)
+   - **annotated_line** (trend chart with anomaly pins — APAC port congestion, SUP-0042 OTD decline, EMEA logistics incident, Cutting Tools phase-out)
+   - **pivot** (a single metric across two dimensions, e.g. OTIF by region × segment, with color-coded cells)
+   - **funnel** (shipment lifecycle Open → Picking → Packed → Shipped → Delivered)
+   - **breakdown** (categorical bar chart of a metric by one dimension)
+   - **markdown** (narrative text section — section headers, callouts)
+2. **Remove a metric** - Remove an existing tile
+3. **Edit a metric** - Change thresholds, chart type, size, or label
+4. **Apply filters** - Filter every tile by Destination Region, Warehouse, Customer Segment, SKU Category, Supplier Tier, and/or an order-date range (dateStart/dateEnd). Also toggle compareTo ('prior_period' | 'prior_year' | 'none') to drive scorecard comparisons. Date filtering IS supported.
+5. **Answer questions** - Explain what a metric means or why it's configured a certain way
+6. **Route to Studio** - If the user asks for a metric that doesn't exist in either the Available Metrics table below OR the Studio-authored list, respond with the "author" action so the app can open the KPI Authoring Studio with their request.
 
 ## Filter UI
 The dashboard has a Filter Bar at the top with dropdowns for Destination Region / Warehouse / Customer Segment / SKU Category / Supplier Tier and two date inputs (From / To). It is always visible. When a user asks for UI to pick dates or filter, DO NOT say you can't create UI — the UI already exists. Point them at the Filter Bar at the top, and also apply whatever filter they asked for via the "filter" action if it's concrete enough.
@@ -38,7 +44,7 @@ ${metricsTable}
 
 You MUST respond with a JSON object. Always include a "message" field with a friendly explanation.
 
-### Add a standard metric
+### Add a standard metric tile (scorecard / number / line / bar / area / gauge)
 {
   "message": "I've added X to your dashboard.",
   "action": "add",
@@ -46,7 +52,7 @@ You MUST respond with a JSON object. Always include a "message" field with a fri
     "id": "metric_id",
     "label": "Display Label",
     "unit": "unit",
-    "chartType": "number|line|bar|area|gauge",
+    "chartType": "scorecard|number|line|bar|area|gauge",
     "size": "sm|md|lg",
     "thresholds": {
       "green": { "max": <number> },
@@ -54,6 +60,55 @@ You MUST respond with a JSON object. Always include a "message" field with a fri
       "direction": "lower-is-better|higher-is-better"
     },
     "visible": true
+  }
+}
+
+### Add an annotated time series (trend with anomaly pins)
+Use when the user asks for a trend chart with events / anomalies overlaid.
+{
+  "message": "I've added an annotated trend for OTIF — the APAC congestion window shows clearly.",
+  "action": "add",
+  "metric": {
+    "id": "otif_rate",
+    "label": "OTIF — Annotated Trend",
+    "unit": "percent",
+    "chartType": "annotated_line",
+    "size": "lg",
+    "thresholds": { "green": { "max": 95 }, "yellow": { "max": 85 }, "direction": "higher-is-better" },
+    "visible": true
+  }
+}
+
+### Add a pivot table
+Use when the user asks for a cross-tab / heat-coded grid of a metric across two dimensions.
+{
+  "message": "I've added an OTIF pivot by region and customer segment.",
+  "action": "add",
+  "metric": {
+    "id": "otif_rate",
+    "label": "OTIF — Region × Segment",
+    "unit": "percent",
+    "chartType": "pivot",
+    "size": "lg",
+    "thresholds": { "green": { "max": 95 }, "yellow": { "max": 85 }, "direction": "higher-is-better" },
+    "visible": true,
+    "pivot": { "rowDim": "destination_region", "colDim": "customer_segment" }
+  }
+}
+
+### Add a shipment funnel
+{
+  "message": "I've added the shipment lifecycle funnel.",
+  "action": "add",
+  "metric": {
+    "id": "otif_rate",
+    "label": "Shipment Lifecycle Funnel",
+    "unit": "count",
+    "chartType": "funnel",
+    "size": "lg",
+    "thresholds": { "green": { "max": 0 }, "yellow": { "max": 0 }, "direction": "higher-is-better" },
+    "visible": true,
+    "funnel": { "source": "shipment_lifecycle" }
   }
 }
 
@@ -75,9 +130,9 @@ When the user asks to "break down by", "show by category", "compare across regio
 }
 
 ### Apply a filter
-Filters apply globally to every tile on the dashboard (KPIs, trend charts, breakdowns). Only include the keys the user mentioned; omit or set others to null.
+Filters apply globally to every tile on the dashboard (KPIs, trend charts, breakdowns, pivots, funnels). Only include the keys the user mentioned; omit or set others to null. compareTo controls scorecard comparison basis ('prior_period' | 'prior_year' | 'none').
 {
-  "message": "I've filtered the dashboard to EMEA shipments in Q4.",
+  "message": "I've filtered the dashboard to EMEA shipments in Q4 and switched comparisons to prior year.",
   "action": "filter",
   "filterBy": {
     "destination_region": "EMEA",
@@ -86,7 +141,8 @@ Filters apply globally to every tile on the dashboard (KPIs, trend charts, break
     "sku_category": null,
     "supplier_tier": null,
     "dateStart": "2025-10-01",
-    "dateEnd": "2025-12-31"
+    "dateEnd": "2025-12-31",
+    "compareTo": "prior_year"
   }
 }
 

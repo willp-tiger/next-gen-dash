@@ -124,10 +124,26 @@ router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) 
         position: config.metrics.length,
         visible: true,
       };
-      // For breakdown charts, allow multiple (different breakdownBy dimensions)
-      const isDuplicate = newMetric.chartType === 'breakdown'
-        ? config.metrics.find(m => m.id === newMetric.id && m.breakdownBy === newMetric.breakdownBy)
-        : config.metrics.find(m => m.id === newMetric.id && m.chartType !== 'breakdown');
+      // For widgets that can be added multiple times with different configurations, key the duplicate
+      // check on the discriminating field (breakdownBy, pivot dims, etc.) so users can add several variants.
+      const isDuplicate = (() => {
+        if (newMetric.chartType === 'breakdown') {
+          return config.metrics.find(m => m.id === newMetric.id && m.chartType === 'breakdown' && m.breakdownBy === newMetric.breakdownBy);
+        }
+        if (newMetric.chartType === 'pivot') {
+          return config.metrics.find(m => m.id === newMetric.id && m.chartType === 'pivot'
+            && m.pivot?.rowDim === newMetric.pivot?.rowDim && m.pivot?.colDim === newMetric.pivot?.colDim);
+        }
+        if (newMetric.chartType === 'funnel') {
+          return config.metrics.find(m => m.chartType === 'funnel' && m.funnel?.source === newMetric.funnel?.source);
+        }
+        if (newMetric.chartType === 'annotated_line') {
+          return config.metrics.find(m => m.id === newMetric.id && m.chartType === 'annotated_line');
+        }
+        return config.metrics.find(m => m.id === newMetric.id
+          && m.chartType === newMetric.chartType
+          && !['breakdown', 'pivot', 'funnel', 'annotated_line'].includes(m.chartType));
+      })();
       if (!isDuplicate) {
         config.metrics.push(newMetric);
         config.updatedAt = new Date().toISOString();

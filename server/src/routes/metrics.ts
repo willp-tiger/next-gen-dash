@@ -13,6 +13,10 @@ import type { FilterState } from '../../../shared/types.js';
 const router = Router();
 
 function parseFilters(req: Request): FilterState {
+  const compareToRaw = req.query.compareTo as string | undefined;
+  const compareTo = compareToRaw === 'prior_period' || compareToRaw === 'prior_year' || compareToRaw === 'none'
+    ? compareToRaw
+    : undefined;
   return {
     destination_region: req.query.destination_region as string | undefined,
     warehouse_id: req.query.warehouse_id as string | undefined,
@@ -21,6 +25,7 @@ function parseFilters(req: Request): FilterState {
     supplier_tier: req.query.supplier_tier as string | undefined,
     dateStart: req.query.dateStart as string | undefined,
     dateEnd: req.query.dateEnd as string | undefined,
+    compareTo,
   };
 }
 

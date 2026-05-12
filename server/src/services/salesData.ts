@@ -93,6 +93,39 @@ function applyFilters(sql: string, filters?: FilterState): { sql: string; params
 
 // === Single-metric query ===
 
+/**
+ * Returns a comparison FilterState shifted backwards in time. Returns null when
+ * the requested basis can't be computed (e.g., no date range was set on the input).
+ */
+export function shiftFiltersForComparison(
+  filters: FilterState | undefined,
+  basis: 'prior_period' | 'prior_year'
+): { filters: FilterState; basisLabel: string } | null {
+  if (!filters?.dateStart || !filters?.dateEnd) return null;
+  const start = new Date(filters.dateStart);
+  const end = new Date(filters.dateEnd);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
+
+  let prevStart: Date;
+  let prevEnd: Date;
+  let basisLabel: string;
+  if (basis === 'prior_year') {
+    prevStart = new Date(start); prevStart.setFullYear(prevStart.getFullYear() - 1);
+    prevEnd = new Date(end); prevEnd.setFullYear(prevEnd.getFullYear() - 1);
+    basisLabel = 'vs prior year';
+  } else {
+    const days = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+    prevEnd = new Date(start); prevEnd.setDate(prevEnd.getDate() - 1);
+    prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - (days - 1));
+    basisLabel = 'vs prior period';
+  }
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  return {
+    filters: { ...filters, dateStart: iso(prevStart), dateEnd: iso(prevEnd), compareTo: 'none' },
+    basisLabel,
+  };
+}
+
 async function queryMetric(def: MetricDefinition, filters?: FilterState): Promise<MetricValue> {
   const { sql, params } = applyFilters(def.sql, filters);
 
@@ -101,7 +134,20 @@ async function queryMetric(def: MetricDefinition, filters?: FilterState): Promis
     const { sql: trendSql, params: trendParams } = applyFilters(def.trendSql, filters);
     queries.push(pool.query(trendSql, trendParams));
   }
-  const [valueRes, trendRes] = await Promise.all(queries);
+
+  const compareBasis = filters?.compareTo && filters.compareTo !== 'none' ? filters.compareTo : null;
+  const compareShift = compareBasis ? shiftFiltersForComparison(filters, compareBasis) : null;
+  let comparePromise: Promise<{ rows: { value: string }[] }> | null = null;
+  if (compareShift) {
+    const { sql: cmpSql, params: cmpParams } = applyFilters(def.sql, compareShift.filters);
+    comparePromise = pool.query(cmpSql, cmpParams);
+  }
+
+  const [valueRes, trendRes, cmpRes] = await Promise.all([
+    queries[0],
+    queries[1] ?? Promise.resolve(undefined),
+    comparePromise ?? Promise.resolve(undefined),
+  ]);
 
   const current = parseFloat(valueRes.rows[0]?.value ?? '0');
   const trend = trendRes
@@ -110,11 +156,30 @@ async function queryMetric(def: MetricDefinition, filters?: FilterState): Promis
   const prev = trend.length >= 2 ? trend[trend.length - 2] : current;
   const delta = parseFloat((current - prev).toFixed(2));
 
-  return {
+  const value: MetricValue = {
     current: isFinite(current) ? parseFloat(current.toFixed(2)) : 0,
     trend,
     delta: isFinite(delta) ? delta : 0,
   };
+
+  if (cmpRes && compareShift && compareBasis) {
+    const previous = parseFloat(cmpRes.rows[0]?.value ?? '0');
+    if (isFinite(previous)) {
+      const deltaAbs = parseFloat((current - previous).toFixed(2));
+      const deltaPct = previous !== 0
+        ? parseFloat(((deltaAbs / Math.abs(previous)) * 100).toFixed(1))
+        : 0;
+      value.comparison = {
+        previous: parseFloat(previous.toFixed(2)),
+        deltaAbs,
+        deltaPct,
+        basis: compareBasis,
+        basisLabel: compareShift.basisLabel,
+      };
+    }
+  }
+
+  return value;
 }
 
 function publishedToDef(k: PublishedKpi): MetricDefinition {

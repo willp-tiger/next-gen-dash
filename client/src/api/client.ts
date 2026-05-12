@@ -7,6 +7,11 @@ import type {
   CategoricalSnapshot,
   FilterState,
   AuthResponse,
+  AnnotationEvent,
+  PivotSnapshot,
+  PivotDimension,
+  FunnelSnapshot,
+  TimeseriesSnapshot,
 } from 'shared/types';
 
 const BASE_URL = '/api';
@@ -71,6 +76,7 @@ function buildFilterParams(params: URLSearchParams, filters?: FilterState) {
   if (filters.supplier_tier) params.set('supplier_tier', filters.supplier_tier);
   if (filters.dateStart) params.set('dateStart', filters.dateStart);
   if (filters.dateEnd) params.set('dateEnd', filters.dateEnd);
+  if (filters.compareTo && filters.compareTo !== 'none') params.set('compareTo', filters.compareTo);
 }
 
 export function getMetrics(metricIds?: string[], filters?: FilterState) {
@@ -138,6 +144,34 @@ export function getHeatmapBreakdown(row: string, col: string, filters?: FilterSt
   params.set('col', col);
   buildFilterParams(params, filters);
   return fetchJson<HeatmapSnapshot>(`/metrics/heatmap?${params.toString()}`);
+}
+
+export function getAnnotations() {
+  return fetchJson<{ annotations: AnnotationEvent[] }>('/widgets/annotations');
+}
+
+export function getPivot(metricId: string, rowDim: PivotDimension, colDim: PivotDimension, filters?: FilterState) {
+  const params = new URLSearchParams();
+  params.set('metricId', metricId);
+  params.set('rowDim', rowDim);
+  params.set('colDim', colDim);
+  buildFilterParams(params, filters);
+  return fetchJson<PivotSnapshot>(`/widgets/pivot?${params.toString()}`);
+}
+
+export function getTimeseries(metricId: string, grain: 'daily' | 'weekly' | 'monthly', filters?: FilterState) {
+  const params = new URLSearchParams();
+  params.set('metricId', metricId);
+  params.set('grain', grain);
+  buildFilterParams(params, filters);
+  return fetchJson<TimeseriesSnapshot>(`/widgets/timeseries?${params.toString()}`);
+}
+
+export function getFunnel(source: 'shipment_lifecycle', filters?: FilterState) {
+  const params = new URLSearchParams();
+  params.set('source', source);
+  buildFilterParams(params, filters);
+  return fetchJson<FunnelSnapshot>(`/widgets/funnel?${params.toString()}`);
 }
 
 export function getAvailableFilters() {

@@ -64,7 +64,18 @@ export function FilterBar({ filters, onFilterChange }: FilterBarProps) {
     filters.supplier_tier,
     filters.dateStart,
     filters.dateEnd,
+    filters.compareTo && filters.compareTo !== 'none' ? filters.compareTo : undefined,
   ].filter(Boolean).length;
+
+  const compareTo = filters.compareTo ?? 'none';
+  const setCompareTo = (next: 'none' | 'prior_period' | 'prior_year') => {
+    onFilterChange({ ...filters, compareTo: next === 'none' ? undefined : next });
+  };
+  const COMPARE_OPTIONS: { key: 'none' | 'prior_period' | 'prior_year'; label: string }[] = [
+    { key: 'none', label: 'None' },
+    { key: 'prior_period', label: 'Prior period' },
+    { key: 'prior_year', label: 'Prior year' },
+  ];
 
   const selectCls = 'rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/10 transition';
 
@@ -104,6 +115,26 @@ export function FilterBar({ filters, onFilterChange }: FilterBarProps) {
               }`}
             >
               {preset.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="h-4 w-px bg-slate-200" />
+
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">Compare to</span>
+          {COMPARE_OPTIONS.map(opt => (
+            <button
+              key={opt.key}
+              onClick={() => setCompareTo(opt.key)}
+              className={`rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition ${
+                compareTo === opt.key
+                  ? 'bg-accent text-white'
+                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700'
+              }`}
+              title={opt.key === 'none' ? 'No comparison' : opt.key === 'prior_period' ? 'Compare against equal-length prior window' : 'Compare against same window last year'}
+            >
+              {opt.label}
             </button>
           ))}
         </div>

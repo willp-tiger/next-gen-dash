@@ -1,5 +1,80 @@
 # Session History
 
+## Session 2026-05-12 (afternoon): Phase 4 widget library expansion — first batch
+
+**Goal:** Raise the widget ceiling so chat-authored dashboards read as enterprise BI work, not basic demo output. Build the recommended first batch (Scorecard + Annotated time series + Pivot + Funnel + sectioned layout + filter-bar compareTo toggle).
+
+**Completed Tasks:**
+- Extended `shared/types.ts`:
+  - New `ChartType` union: `'scorecard' | 'annotated_line' | 'pivot' | 'funnel' | 'markdown'` joined the existing set.
+  - `MetricConfig` now carries optional `sectionId`, `pivot: { rowDim, colDim }`, `funnel: { source }`, `target`, `markdown` fields.
+  - `LayoutConfig.sections?: SectionConfig[]` for named groupings; each section can override `columns`.
+  - `FilterState.compareTo?: 'none' | 'prior_period' | 'prior_year'` drives scorecard comparisons.
+  - `MetricValue.comparison?` carries the server-computed prior-period / prior-year value, deltaAbs, deltaPct, basis, basisLabel.
+  - New widget data shapes: `AnnotationEvent`, `PivotSnapshot`, `FunnelSnapshot`, `FunnelStage`, `TimeseriesSnapshot`, `TimeseriesPoint`.
+- Backend:
+  - `server/src/services/salesData.ts` — added `shiftFiltersForComparison(filters, basis)` and wired comparison fetch into `queryMetric` so any KPI with a date range + `compareTo` gets a server-computed `comparison` block.
+  - `server/src/services/widgets.ts` (new) — exposes `getAnnotations()` (re-derives the 4 seeded anomaly dates from `TODAY` since there's no annotations table), `generatePivot(metricId, rowDim, colDim, filters)`, `generateShipmentFunnel(filters)`, `generateTimeseries(metricId, grain, filters)`. Pivot uses metric-specific value expressions (OTIF-as-rate, exception-as-rate, default SUM(total_value)). Funnel computes cumulative-reach counts for Open → Picking → Packed → Shipped → Delivered.
+  - `server/src/routes/widgets.ts` (new) — `/api/widgets/annotations`, `/pivot`, `/funnel`, `/timeseries`. Wired into `server/src/index.ts`.
+  - `server/src/routes/metrics.ts` — `parseFilters` now forwards `compareTo`.
+- Client widgets (all new):
+  - `ScorecardTile.tsx` — number + comparison badge + comparison detail line + target progress bar (higher-is-better) + sparkline. Reads `value.comparison` when present, falls back to `value.delta`.
+  - `AnnotatedLineTile.tsx` — weekly line chart fetched via `/widgets/timeseries`. Renders `ReferenceArea` for range annotations, `ReferenceLine` for point events, `ReferenceDot` pins on the line, plus a legend list under the chart. Severity color coding (info/warning/critical).
+  - `PivotTile.tsx` — rows × cols table with cells color-scaled (red → amber → emerald gradient, direction-aware). Defaults to `destination_region × customer_segment` if no pivot config supplied. Inline legend showing min → max.
+  - `FunnelTile.tsx` — horizontal bars per stage with count + percentage + drop-off badge between stages + end-to-end conversion footer.
+- Filter bar (`FilterBar.tsx`):
+  - Added a "Compare to" segmented control (None / Prior period / Prior year) feeding `filters.compareTo`. Active state uses accent color.
+  - `activeCount` now reflects an explicit compareTo selection.
+- Dashboard (`Dashboard.tsx`):
+  - Introduced `renderTile(metric)` unified dispatch covering all 10 chart types.
+  - Self-fetching widgets (`pivot`, `funnel`, `annotated_line`, `markdown`) added to the snapshot-fetch exclusion set.
+  - `topKpis` in Executive Summary now includes both `number` and `scorecard` tiles.
+  - "Trend Charts" section in Overview now uses `renderTile`, surfacing pivots/funnels/annotated lines correctly.
+  - All Metrics tab: when `layout.sections` is present, renders each section header + grid; otherwise falls back to the legacy single-grid path. Sections can override column counts.
+- Claude prompts:
+  - `prompts/interpret.ts` — chart-type guidance now lists all 10 types with usage hints; example schema includes optional `pivot`, `funnel`, `sectionId` fields and `layout.sections`.
+  - `prompts/dashboardChat.ts` — capabilities list mentions scorecard / annotated_line / pivot / funnel / markdown. Added explicit JSON examples for each. Filter-action example shows `compareTo`.
+- Chat route (`routes/dashboardChat.ts`) — duplicate-detection rewritten to discriminate widget variants by `breakdownBy` / `pivot` dims / `funnel.source`, so users can add multiple pivots or annotated lines with different configurations.
+- Tests:
+  - `tests/widgets.test.ts` (new) — 10 tests covering `shiftFiltersForComparison` (null cases, 7-day shift, year shift, recursion guard, non-date preservation) and `getAnnotations` (4 expected IDs, ISO date shape, APAC window dates, EMEA point event, severity union).
+  - Full suite: 88 passed (78 prior + 10 new). Both server `tsc` and client `tsc -b && vite build` clean.
+
+**Technical Decisions:**
+- **Annotation derivation, not storage.** The four narrative anomalies are baked into seed values and reference `TODAY`. Persisting them as rows would duplicate truth-of-source; instead, `widgets.ts` re-derives the same dates with identical math (apacCongestionWindow, emeaIncidentDate, supDegradationStart, cuttingToolsPhaseOutStart). One place to update if windows ever shift.
+- **Timeseries endpoint instead of richer trendSql.** Existing KPI `trendSql` returns values only, no dates. Rather than retrofit every KPI definition, the new `/widgets/timeseries` endpoint computes a dated series on demand using each metric's pivot value expression. Keeps published KPIs unchanged; the annotated-line widget gets its own data path.
+- **Server-side comparison, not client-side delta math.** The `MetricValue.comparison` block is computed on the server because (a) it requires a second filtered query against shifted dates, and (b) the basis label and exact previous value are useful to render alongside the delta. The client falls back to `value.delta` (last-vs-prior trend point) when `comparison` isn't populated.
+- **Self-fetching widgets.** Pivot, funnel, and annotated_line each hit their dedicated endpoints rather than piggybacking on `/metrics`. This lets them define their own data shapes without ballooning `MetricsSnapshot`, and avoids fetching pivot grids for tiles that aren't currently rendered.
+
+**Files Created:**
+- `server/src/services/widgets.ts`
+- `server/src/routes/widgets.ts`
+- `client/src/components/dashboard/ScorecardTile.tsx`
+- `client/src/components/dashboard/AnnotatedLineTile.tsx`
+- `client/src/components/dashboard/PivotTile.tsx`
+- `client/src/components/dashboard/FunnelTile.tsx`
+- `tests/widgets.test.ts`
+
+**Files Modified:**
+- `shared/types.ts`
+- `server/src/index.ts`
+- `server/src/services/salesData.ts`
+- `server/src/routes/metrics.ts`
+- `server/src/routes/dashboardChat.ts`
+- `server/src/prompts/interpret.ts`
+- `server/src/prompts/dashboardChat.ts`
+- `client/src/api/client.ts`
+- `client/src/components/dashboard/Dashboard.tsx`
+- `client/src/components/dashboard/FilterBar.tsx`
+
+**Outstanding for Next Session:**
+- **Visual verification in the browser.** Builds + tests pass, but the four widgets haven't been eyeballed yet — start the dev server and walk through each tile type with seeded supply chain data, including the compareTo toggle behavior and the annotated line over the OTIF series during the APAC congestion window.
+- **Phase 5 — Showcase dashboard.** Wire the "Q4 2025 Global Supply Chain Performance Review" CSCO view as a 16-tile sectioned dashboard using the new widgets. Sections: Headline (4 scorecards) / What Changed (annotated trend + waterfall) / Where (pivot + geo + status grid) / Customer & Pipeline (funnel + cohort + top-N) / Operations (bullet + calendar heatmap + stacked area).
+- Remaining widget types from the original plan (waterfall, cohort retention grid, top-N with data bars, bullet chart, calendar heatmap, status grid, stacked area) — pull into a Phase 4.5 batch once the showcase exercises the first four enough to surface gaps.
+
+**Git Commit:** Not yet committed — pending user review.
+
+---
+
 ## Session 2026-05-12: Replace retail sales dataset with Meridian supply chain
 
 **Strategic framing:**

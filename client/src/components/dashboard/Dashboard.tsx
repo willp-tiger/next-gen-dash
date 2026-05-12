@@ -11,6 +11,10 @@ import { ViewToggle } from './ViewToggle';
 import { MetricTile } from './MetricTile';
 import { GaugeTile } from './GaugeTile';
 import { ChartTile } from './ChartTile';
+import { ScorecardTile } from './ScorecardTile';
+import { AnnotatedLineTile } from './AnnotatedLineTile';
+import { PivotTile } from './PivotTile';
+import { FunnelTile } from './FunnelTile';
 import { BreakdownChart } from './BreakdownChart';
 import { HeatMapChart } from './HeatMapChart';
 import { EmptyMetricTile } from './EmptyMetricTile';
@@ -95,8 +99,11 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
 
   const fetchMetrics = useCallback(async () => {
     try {
+      // Only metrics whose tiles read from the snapshot need to be fetched here.
+      // Self-fetching widgets (pivot, annotated_line, funnel) and pure breakdowns/heatmaps load their own data.
+      const SELF_FETCHING = new Set(['breakdown', 'heatmap', 'pivot', 'annotated_line', 'funnel', 'markdown']);
       const ids = activeConfig.metrics
-        .filter((m) => m.visible && m.chartType !== 'breakdown')
+        .filter((m) => m.visible && !SELF_FETCHING.has(m.chartType))
         .map((m) => m.id);
       const data = await getMetrics(ids, filters);
       setSnapshot(data);
@@ -206,11 +213,61 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
     .filter((m) => m.visible)
     .sort((a, b) => a.position - b.position);
 
-  const standardMetrics = visibleMetrics.filter(m => m.chartType !== 'breakdown' && m.chartType !== 'heatmap');
-  const breakdownMetrics = visibleMetrics.filter(m => m.chartType === 'breakdown' || m.chartType === 'heatmap');
+  const breakdownTypes = new Set(['breakdown', 'heatmap']);
+  const standardMetrics = visibleMetrics.filter(m => !breakdownTypes.has(m.chartType));
+  const breakdownMetrics = visibleMetrics.filter(m => breakdownTypes.has(m.chartType));
 
   const cols = activeConfig.layout?.columns ?? 3;
   const gridClass = `grid gap-5 grid-cols-1 sm:grid-cols-2 md:grid-cols-${cols} lg:grid-cols-${cols}`;
+
+  const sections = activeConfig.layout?.sections;
+
+  // Unified tile dispatch: takes a metric and renders the right widget.
+  const renderTile = (metric: MetricConfig) => {
+    const openDetail = () => setSelectedMetric(metric.id);
+
+    if (metric.chartType === 'markdown') {
+      return (
+        <div className="metric-card p-5 col-span-1 lg:col-span-2 prose prose-sm max-w-none">
+          {metric.label && <h3 className="text-sm font-bold text-slate-700">{metric.label}</h3>}
+          <p className="text-xs text-slate-500 whitespace-pre-wrap">{metric.markdown || ''}</p>
+        </div>
+      );
+    }
+
+    if (metric.chartType === 'annotated_line') {
+      return <AnnotatedLineTile metric={metric} filters={filters} onClick={openDetail} />;
+    }
+
+    if (metric.chartType === 'pivot') {
+      return <PivotTile metric={metric} filters={filters} onClick={openDetail} />;
+    }
+
+    if (metric.chartType === 'funnel') {
+      return <FunnelTile metric={metric} filters={filters} onClick={openDetail} />;
+    }
+
+    if (metric.chartType === 'breakdown' || metric.chartType === 'heatmap') {
+      const filtered = applyGlobalFilters(metric);
+      if (metric.chartType === 'heatmap') return <HeatMapChart metric={filtered} />;
+      return <BreakdownChart metric={filtered} />;
+    }
+
+    // Snapshot-backed tiles
+    const val = snapshot?.metrics[metric.id];
+    if (!val) return <EmptyMetricTile metric={metric} onClick={openDetail} />;
+
+    if (metric.chartType === 'gauge') {
+      return <GaugeTile metric={metric} value={val} userId={userId} onClick={openDetail} />;
+    }
+    if (metric.chartType === 'scorecard') {
+      return <ScorecardTile metric={metric} value={val} userId={userId} onClick={openDetail} />;
+    }
+    if (metric.chartType === 'line' || metric.chartType === 'bar' || metric.chartType === 'area') {
+      return <ChartTile metric={metric} value={val} userId={userId} onClick={openDetail} />;
+    }
+    return <MetricTile metric={metric} value={val} userId={userId} onClick={openDetail} />;
+  };
 
   const refreshAgo = () => {
     const seconds = Math.floor((Date.now() - lastRefresh.getTime()) / 1000);
@@ -236,8 +293,11 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
     return { healthy, warning, critical, score };
   }, [snapshot, standardMetrics]);
 
-  // Top KPIs for executive summary (first 6 number-type metrics)
-  const topKpis = standardMetrics.filter(m => m.chartType === 'number').slice(0, 6);
+  // Top KPIs for executive summary — include scorecards alongside plain numbers since they
+  // serve the same headline-tile role.
+  const topKpis = standardMetrics
+    .filter(m => m.chartType === 'number' || m.chartType === 'scorecard')
+    .slice(0, 6);
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -485,24 +545,18 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
             </div>
           )}
 
-          {/* Chart metrics in overview */}
-          {standardMetrics.filter(m => m.chartType !== 'number').length > 0 && (
+          {/* Chart / advanced widgets in overview (everything except simple number/scorecard tiles) */}
+          {standardMetrics.filter(m => m.chartType !== 'number' && m.chartType !== 'scorecard').length > 0 && (
             <>
               <div className="section-divider">
-                <h3>Trend Charts</h3>
+                <h3>Trend Charts &amp; Widgets</h3>
               </div>
               <div className={gridClass}>
-                {standardMetrics.filter(m => m.chartType !== 'number').map(metric => {
-                  const val = snapshot.metrics[metric.id];
-                  if (!val) {
-                    return <EmptyMetricTile key={metric.id} metric={metric} onClick={() => setSelectedMetric(metric.id)} />;
-                  }
-                  return metric.chartType === 'gauge' ? (
-                    <GaugeTile key={metric.id} metric={metric} value={val} userId={userId} />
-                  ) : (
-                    <ChartTile key={metric.id} metric={metric} value={val} userId={userId} />
-                  );
-                })}
+                {standardMetrics
+                  .filter(m => m.chartType !== 'number' && m.chartType !== 'scorecard')
+                  .map(metric => (
+                    <div key={metric.id}>{renderTile(metric)}</div>
+                  ))}
               </div>
             </>
           )}
@@ -514,15 +568,9 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
                 <h3>Breakdowns</h3>
               </div>
               <div className={gridClass}>
-                {breakdownMetrics.map((metric) => {
-                  const filtered = applyGlobalFilters(metric);
-                  if (metric.chartType === 'heatmap') {
-                    return <HeatMapChart key={`${metric.id}-heatmap`} metric={filtered} />;
-                  }
-                  return (
-                    <BreakdownChart key={`${metric.id}-${metric.breakdownBy}`} metric={filtered} />
-                  );
-                })}
+                {breakdownMetrics.map((metric) => (
+                  <div key={`${metric.id}-${metric.breakdownBy ?? metric.chartType}`}>{renderTile(metric)}</div>
+                ))}
               </div>
             </>
           )}
@@ -532,53 +580,64 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
       {/* All Metrics tab (full detail grid) */}
       {dashTab === 'metrics' && (
         <>
-          {snapshot && standardMetrics.length > 0 && (
-            <div className={gridClass}>
-              {standardMetrics.map((metric) => {
-                const val = snapshot.metrics[metric.id];
-                const isChart =
-                  metric.chartType === 'line' ||
-                  metric.chartType === 'bar' ||
-                  metric.chartType === 'area';
-                const animClass = animatedIds.has(metric.id) ? 'animate-tile-enter' : '';
+          {sections && sections.length > 0 ? (
+            // Sectioned layout: render each section header + its assigned metrics.
+            sections.map(section => {
+              const sectionMetrics = visibleMetrics.filter(m => m.sectionId === section.id);
+              if (sectionMetrics.length === 0) return null;
+              const sectionCols = section.columns ?? cols;
+              const sectionGridClass = `grid gap-5 grid-cols-1 sm:grid-cols-2 md:grid-cols-${sectionCols} lg:grid-cols-${sectionCols}`;
+              return (
+                <div key={section.id} className="space-y-3">
+                  <div className="section-divider">
+                    <h3>{section.label}</h3>
+                    {section.description && (
+                      <p className="text-[11px] font-medium text-slate-400 mt-0.5">{section.description}</p>
+                    )}
+                  </div>
+                  <div className={sectionGridClass}>
+                    {sectionMetrics.map(metric => {
+                      const animClass = animatedIds.has(metric.id) ? 'animate-tile-enter' : '';
+                      return (
+                        <div key={metric.id} className={animClass}>
+                          {renderTile(metric)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <>
+              {standardMetrics.length > 0 && (
+                <div className={gridClass}>
+                  {standardMetrics.map((metric) => {
+                    const animClass = animatedIds.has(metric.id) ? 'animate-tile-enter' : '';
+                    return (
+                      <div key={metric.id} className={animClass}>
+                        {renderTile(metric)}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
-                const openDetail = () => setSelectedMetric(metric.id);
-                const tile = !val ? (
-                  <EmptyMetricTile key={metric.id} metric={metric} onClick={openDetail} />
-                ) : metric.chartType === 'gauge' ? (
-                  <GaugeTile key={metric.id} metric={metric} value={val} userId={userId} onClick={openDetail} />
-                ) : isChart ? (
-                  <ChartTile key={metric.id} metric={metric} value={val} userId={userId} onClick={openDetail} />
-                ) : (
-                  <MetricTile key={metric.id} metric={metric} value={val} userId={userId} onClick={openDetail} />
-                );
-
-                return animClass ? (
-                  <div key={metric.id} className={animClass}>{tile}</div>
-                ) : (
-                  <div key={metric.id}>{tile}</div>
-                );
-              })}
-            </div>
-          )}
-
-          {breakdownMetrics.length > 0 && (
-            <div>
-              <div className="section-divider">
-                <h3>Breakdowns</h3>
-              </div>
-              <div className={gridClass}>
-                {breakdownMetrics.map((metric) => {
-                  const filtered = applyGlobalFilters(metric);
-                  if (metric.chartType === 'heatmap') {
-                    return <HeatMapChart key={`${metric.id}-heatmap`} metric={filtered} />;
-                  }
-                  return (
-                    <BreakdownChart key={`${metric.id}-${metric.breakdownBy}`} metric={filtered} />
-                  );
-                })}
-              </div>
-            </div>
+              {breakdownMetrics.length > 0 && (
+                <div>
+                  <div className="section-divider">
+                    <h3>Breakdowns</h3>
+                  </div>
+                  <div className={gridClass}>
+                    {breakdownMetrics.map((metric) => (
+                      <div key={`${metric.id}-${metric.breakdownBy ?? metric.chartType}`}>
+                        {renderTile(metric)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </>
       )}

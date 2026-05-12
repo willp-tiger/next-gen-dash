@@ -2,51 +2,46 @@
 
 ## Current State
 **Project**: Meridian Industrial Supply demo (B2B industrial parts distributor)
-**Phase**: 4 — Widget library expansion + showcase dashboard (Phases 1–3 of supply-chain migration complete)
-**Last Commit**: `07e99bb` (pushed)
+**Phase**: 4 (widget library expansion) — first batch landed; ready for visual verification and Phase 5 showcase wiring
+**Last Commit**: `07e99bb` (pushed) — Phase 4 widget batch not yet committed
 **Demo Pitch**: democratization of dashboard authoring for non-technical business users; the artifact itself must read as enterprise-grade BI work.
 
-## Most Recent Completed Work — Session 2026-05-12
-Replaced retail sales dataset (single `sales_orders` table + 16 KPIs + 3 sales personas) with a full 11-table B2B supply chain data model under Meridian Industrial Supply: 200 suppliers, 12 warehouses, 18 carriers, 2,000 customers, 5,000 SKUs, ~55k shipments, ~25k PO lines, ~947k inventory snapshots. New 23-KPI library across Fulfillment / Inventory / Procurement / Logistics / Operations. Three new personas (CSCO, Warehouse Director, Procurement Lead). All Claude prompts, filter dimensions, client UI, and 78-test suite updated. Four narrative anomalies seeded into the data (APAC port congestion Nov 8–22, supplier SUP-0042 OTD decline last 120 days, EMEA logistics incident May 6, Cutting Tools category phase-out). See SESSION_HISTORY.md for full detail.
+## Most Recent Completed Work — Session 2026-05-12 (afternoon)
 
-## Open Issues To Resolve Before Showcase Work
+Phase 4 widget batch #1 shipped, plus sectioned-layout support and a filter-bar `compareTo` toggle. Net-new widgets:
 
-**Bug — partial seed (top priority for next session):**
-After running migrations once on the Railway-connected Postgres, three tables came up empty when the rest of the seed completed correctly:
-- `exceptions`: 0 rows (expected ~15k)
-- `returns`: 0 rows (expected ~8k)
-- `kpi_definitions`: 0 rows (expected 23)
-- `kpi_versions`: 0 rows (expected ~25)
+- **Scorecard** — number + comparison vs prior period/year + target progress + sparkline; reads server-computed `MetricValue.comparison` when a date range is set.
+- **Annotated time series** — weekly line chart via new `/api/widgets/timeseries`, with `ReferenceArea` for range anomalies (APAC port congestion, SUP-0042 OTD decline, Cutting Tools phase-out) and `ReferenceLine` for point events (EMEA logistics incident). Pin dots + severity-coded legend.
+- **Pivot table** — rows × cols of any metric across two dimensions with cell-by-cell heat coloring (direction-aware red → amber → emerald gradient).
+- **Funnel** — Open → Picking → Packed → Shipped → Delivered cumulative reach with drop-off % per stage and end-to-end conversion footer.
 
-Other tables seeded correctly (947k inventory snapshots and all the dimensions). Most likely either (a) seed was interrupted partway and the next boot skipped because skus had rows, or (b) a logic bug in `generateExceptions`/`generateReturns` or in `seedKpiLibrary`.
+Backend additions:
+- `server/src/services/widgets.ts` — `getAnnotations()`, `generatePivot`, `generateShipmentFunnel`, `generateTimeseries`.
+- `server/src/routes/widgets.ts` mounted at `/api/widgets/*`.
+- `salesData.ts` — `shiftFiltersForComparison` + comparison query in `queryMetric` populating `MetricValue.comparison` when `compareTo` is set.
 
-**Diagnostic plan:**
-1. Run `RESET_DATA=true npm run dev` to force a clean wipe + reseed. Watch the console output for the per-step log lines (`seeded N exceptions`, `seeded N returns`, `Seeded 23 supply chain KPI definitions.`).
-2. If exceptions/returns still come up empty, inspect the generation logic in `server/src/services/supplyChain/seedFacts.ts`:
-   - `generateExceptions` iterates `shipments` and applies probability gating; if all probabilities are < `rng.next()`, nothing emits. Verify the rate math.
-   - `generateReturns` requires `ship.status === 'Delivered' && ship.deliveredDate`. Verify the shipments generator is producing Delivered records (it should — anything more than `carrier.slaDays + 2` days old gets a deliveredDate unless future-dated).
-3. If `kpi_definitions` stays empty, add per-KPI insert logging in `seedKpiLibrary` to find the failing row.
+Type additions in `shared/types.ts`: new `ChartType` union, `SectionConfig`, `MetricConfig.{sectionId, pivot, funnel, target, markdown}`, `FilterState.compareTo`, `MetricValue.comparison`, and the four new widget snapshot shapes.
+
+Dashboard render switch consolidated into a single `renderTile(metric)` dispatcher; All Metrics tab honors `layout.sections` when present. Filter bar gained a "Compare to" segmented control. Claude prompts updated for chat-driven creation of each new widget type.
+
+Tests: 88 passing total (78 prior + 10 new in `tests/widgets.test.ts` covering comparison shift math and annotation registry). Server `tsc` and client `tsc -b && vite build` clean.
+
+## Open Issues / Verification Needed Before Phase 5
+
+- **Visual verification in the browser is outstanding.** Builds and tests pass, which gives strong type/structural confidence, but I have not opened the app to confirm each new widget looks right against seeded data. Next session should boot `npm run dev`, walk through the four new tile types, exercise the compareTo toggle, and confirm the annotated line shows the APAC congestion shading over the OTIF trend.
 
 ## Next Session Goals
 
-1. **Resolve the partial-seed bug** (see above). Don't proceed to widget work until KPIs and exceptions/returns are seeded — KPIs especially block dashboard rendering.
+1. **Walk the new widgets visually** with seeded supply chain data. Confirm:
+   - Scorecard renders comparison block when a date range + compareTo is set; falls back gracefully when neither is set.
+   - Annotated line shows all four anomalies in their correct windows; severity colors match.
+   - Pivot color gradient inverts correctly for `lower-is-better` metrics (e.g., exception_rate should be greener at low values).
+   - Funnel stage counts make sense given the seeded ~55k shipments and the 'Delivered' tail.
+   - "Compare to" toggle in the filter bar flows through to scorecards (and only scorecards).
 
-2. **Phase 4 — Widget library expansion**. The simple bar/line/gauge widgets undercut the democratization pitch by making chat output look basic. Net-new widgets needed (per the plan in this session's chat):
-   - **Scorecard** (number + sparkline + comparison vs target/prior period + delta badge) — biggest reusable win, upgrades every KPI tile
-   - **Annotated time series** (line chart + event-pin overlay for anomalies)
-   - **Pivot table** with conditional formatting (color cells by value)
-   - **Funnel** (shipment lifecycle: Open → Picking → Packed → Shipped → Delivered, with drop-off %)
-   - **Waterfall** (OTIF bridge: prior → on-time impact + in-full impact + exception impact → current)
-   - **Cohort retention grid** (customers by acquisition month × monthly retention)
-   - **Top-N list with embedded data bars** (e.g., top 10 suppliers by OTD ranked, with bar)
-   - **Bullet chart** (actual vs target with qualitative bands)
-   - **Calendar heatmap** (daily shipment volume across 12 months)
-   - **Status grid** (compact tile-row with badge + spark + count per group)
-   - **Stacked area** (status mix over time)
-   - **Markdown text tile** (section headers / narrative context within a dashboard)
-   - Recommended starting subset for first PR: **Scorecard + Annotated time series + Pivot + Funnel** plus the sectioned layout + filter bar `compareTo` toggle. Lands the ceiling-raise without a multi-week build.
+2. **Phase 5 — Showcase dashboard**. Build the seeded "Q4 2025 Global Supply Chain Performance Review" CSCO view as a 16-tile sectioned dashboard using these new widgets. Sections: Headline (4 scorecards) / What Changed (annotated trend + waterfall) / Where (pivot + geo + status grid) / Customer & Pipeline (funnel + cohort + top-N) / Operations (bullet + calendar heatmap + stacked area). Wire it as the default landing for the CSCO persona.
 
-3. **Phase 5 — Showcase dashboard**. Build the seeded "Q4 2025 Global Supply Chain Performance Review" CSCO view as a 16-tile sectioned dashboard. Sections: Headline (4 scorecards) / What Changed (annotated trend + waterfall) / Where (pivot + geo + status grid) / Customer & Pipeline (funnel + cohort + top-N) / Operations (bullet + calendar heatmap + stacked area). Wire it as the default landing for the CSCO persona.
+3. **Phase 4.5 — Remaining widget types** once the showcase exercises the first batch. Plan order: Waterfall (OTIF bridge) → Cohort retention grid → Top-N with data bars → Bullet chart → Calendar heatmap → Status grid → Stacked area → Markdown text tile (skeleton already exists but needs proper renderer).
 
 ## Constraints to Honor
 
@@ -58,11 +53,11 @@ From memory (`feedback_chat_capabilities.md`):
 
 ## Things to Verify on Railway/Local Boot
 
-1. Server log shows full migration sequence on boot (`=== Migrations: starting ===` through `=== Migrations: complete ===`).
-2. After boot, table row counts match expectations (see SESSION_HISTORY.md "Outstanding Issue" section).
-3. Persona switcher shows the three new personas (CSCO, Warehouse Director, Procurement Lead).
-4. Dashboard chat applies new filter dimensions correctly (e.g., "filter to EMEA" sets `destination_region=EMEA`).
-5. KPI Catalog shows the 23 supply chain KPIs with their ownership + version history + tags.
+1. `/api/widgets/annotations` returns the four narrative events with sensible dates.
+2. `/api/widgets/timeseries?metricId=otif_rate&grain=weekly` returns dated points spanning the seed range.
+3. `/api/widgets/pivot?metricId=otif_rate&rowDim=destination_region&colDim=customer_segment` returns a non-empty grid.
+4. `/api/widgets/funnel?source=shipment_lifecycle` returns five stages with monotonically non-increasing counts.
+5. With `compareTo=prior_period` and a date range applied, `/api/metrics` responses include a `comparison` block on each value.
 
 ## Skipped Untracked Files (intentionally not committed)
 

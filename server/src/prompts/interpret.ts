@@ -26,8 +26,17 @@ ${metricsTable}
    - "logistics / carriers" → carrier_otd, avg_transit_days, damage_rate
    - "risk / critical" → critical_sku_stockout_rate, exception_rate, avg_exception_mttr
 4. Set thresholds from any numbers the user mentions, or use sensible defaults.
-5. Choose appropriate chart types: "number" for single KPIs, "line" for trends, "bar" for comparisons, "area" for volume, "gauge" for percentages/scores, "heatmap" for cross-dimensional analysis.
-6. Choose sizes: "lg" for the most important 1-2 metrics, "md" for standard, "sm" for supplementary.
+5. Choose appropriate chart types:
+   - "scorecard" — DEFAULT for headline KPIs. Number + sparkline + comparison badge + target track.
+   - "number" — bare number, only when the user explicitly wants minimal chrome.
+   - "gauge" — percentages/scores against a target band (esp. customer-facing rates like OTIF).
+   - "line" / "area" — historical trends with no annotations.
+   - "annotated_line" — historical trend with anomaly pins. Use when a metric has a story to tell (OTIF dip during the APAC congestion window, supplier OTD decline, etc.).
+   - "bar" — comparisons of a small number of categories.
+   - "pivot" — table of one metric across two dimensions (e.g., OTIF by region × segment). Requires "pivot": { "rowDim": "...", "colDim": "..." }.
+   - "funnel" — shipment lifecycle conversion (Open → Picking → Packed → Shipped → Delivered). No metric id needed (use "otif_rate" or any fulfillment KPI as the anchor); requires "funnel": { "source": "shipment_lifecycle" }.
+6. Choose sizes: "lg" for the most important 1-2 metrics, "md" for standard, "sm" for supplementary. Pivot, funnel, and annotated_line render at extra width regardless of "size".
+7. Optional: group metrics into named sections via layout.sections. Each metric assigned to a section sets metric.sectionId = section.id. Sections render with headers (e.g., Headline / What Changed / Where).
 
 ## Response Format
 
@@ -47,7 +56,7 @@ Return ONLY valid JSON matching this exact schema, with no additional text, mark
       "id": "metric_id from the table above",
       "label": "Display label",
       "unit": "unit from the table above",
-      "chartType": "number" | "line" | "bar" | "area" | "gauge",
+      "chartType": "scorecard" | "number" | "line" | "bar" | "area" | "gauge" | "annotated_line" | "pivot" | "funnel",
       "size": "sm" | "md" | "lg",
       "thresholds": {
         "green": { "max": <number> },
@@ -56,12 +65,18 @@ Return ONLY valid JSON matching this exact schema, with no additional text, mark
       },
       "position": <integer starting at 0>,
       "visible": true,
+      "sectionId": "<optional id of a section from layout.sections>",
+      "pivot": { "rowDim": "destination_region|customer_segment|category|warehouse_id|abc_class|supplier_tier", "colDim": "..." },
+      "funnel": { "source": "shipment_lifecycle" },
       "reasoning": "Brief explanation of why this metric was selected based on the user's input"
     }
   ],
   "layout": {
     "columns": 2 | 3 | 4,
-    "showCanonicalToggle": true
+    "showCanonicalToggle": true,
+    "sections": [
+      { "id": "headline", "label": "Headline", "description": "Top-line KPIs", "columns": 4 }
+    ]
   }
 }
 
