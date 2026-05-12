@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import type {
   DashboardConfig,
   MetricsSnapshot,
@@ -97,32 +97,42 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
     if ((hasBreakdown || hasGlobal) && !showFilters) setShowFilters(true);
   }, [activeConfig.metrics, activeConfig.globalFilters, showFilters]);
 
-  const fetchMetrics = useCallback(async () => {
-    try {
-      // Only metrics whose tiles read from the snapshot need to be fetched here.
-      // Self-fetching widgets (pivot, annotated_line, funnel) and pure breakdowns/heatmaps load their own data.
-      const SELF_FETCHING = new Set(['breakdown', 'heatmap', 'pivot', 'annotated_line', 'funnel', 'markdown']);
-      const ids = activeConfig.metrics
-        .filter((m) => m.visible && !SELF_FETCHING.has(m.chartType))
-        .map((m) => m.id);
-      const data = await getMetrics(ids, filters);
-      setSnapshot(data);
-      setLastRefresh(new Date());
-    } catch {
-      // ignore fetch errors
-    } finally {
-      setLoading(false);
-    }
-  }, [activeConfig.metrics, filters]);
-
+  // Inline the fetch into the effect so we can use a closure-local `cancelled` flag.
+  // Without this, rapid filter changes can land out of order: the slower initial /api/metrics
+  // call (no filters → larger query → slower response) returns AFTER the user-triggered
+  // filtered call, overwriting the snapshot with stale all-time data and making the filter
+  // appear broken even though the request was correct.
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
-    fetchMetrics();
+    const SELF_FETCHING = new Set(['breakdown', 'heatmap', 'pivot', 'annotated_line', 'funnel', 'markdown']);
+    const ids = activeConfig.metrics
+      .filter((m) => m.visible && !SELF_FETCHING.has(m.chartType))
+      .map((m) => m.id);
+
+    const run = async () => {
+      try {
+        const data = await getMetrics(ids, filters);
+        if (cancelled) return;
+        setSnapshot(data);
+        setLastRefresh(new Date());
+      } catch {
+        // ignore fetch errors
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    run();
     const interval = setInterval(() => {
-      if (!document.hidden) fetchMetrics();
+      if (!document.hidden && !cancelled) run();
     }, 10_000);
-    return () => clearInterval(interval);
-  }, [fetchMetrics]);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [activeConfig.metrics, filters]);
 
   const handleToggle = async (canonical: boolean) => {
     setIsCanonical(canonical);
