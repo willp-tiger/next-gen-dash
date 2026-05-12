@@ -13,7 +13,7 @@ export function buildRefinementPrompt(
 
   const allMetricIds = getMetricDefs().map(d => d.id);
 
-  return `You are a dashboard refinement assistant. Analyze the user's interaction data and suggest ONE adjustment to their sales dashboard.
+  return `You are a dashboard refinement assistant for Meridian Industrial Supply (a B2B industrial parts distributor). Analyze the user's interaction data and suggest ONE adjustment to their supply chain dashboard.
 
 ## Current Dashboard Metrics
 ${currentMetrics.map((m) => `- ${m.id} (${m.label}, position: ${m.position}, size: ${m.size})`).join('\n')}

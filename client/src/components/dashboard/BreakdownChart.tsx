@@ -28,12 +28,16 @@ export function BreakdownChart({ metric, onClick }: BreakdownChartProps) {
         [metric.id],
         metric.filterBy || {}
       );
-      const dim = metric.breakdownBy || 'product_line';
-      const bd = dim === 'product_line'
-        ? data.breakdowns.byProductLine
-        : dim === 'country'
-        ? data.breakdowns.byCountry
-        : data.breakdowns.byTerritory;
+      const dim = metric.breakdownBy || 'category';
+      const bd = dim === 'category'
+        ? data.breakdowns.byCategory
+        : dim === 'destination_region'
+        ? data.breakdowns.byRegion
+        : dim === 'warehouse_id'
+        ? data.breakdowns.byWarehouse
+        : dim === 'customer_segment'
+        ? data.breakdowns.bySegment
+        : data.breakdowns.byCategory;
       setBreakdown(bd);
     } catch {
       // ignore
@@ -47,14 +51,15 @@ export function BreakdownChart({ metric, onClick }: BreakdownChartProps) {
   }, [fetchData]);
 
   const dimLabels: Record<string, string> = {
-    product_line: 'Product Line',
-    country: 'Country',
-    territory: 'Territory',
-    deal_size: 'Deal Size',
-    quarter: 'Quarter',
+    category: 'Category',
+    destination_region: 'Region',
+    warehouse_id: 'Warehouse',
+    customer_segment: 'Segment',
+    abc_class: 'ABC Class',
+    supplier_tier: 'Supplier Tier',
   };
-  const dimLabel = dimLabels[metric.breakdownBy || 'product_line'] || 'Product Line';
-  const filterLabel = metric.filterBy?.product_line ? ` (${metric.filterBy.product_line})` : '';
+  const dimLabel = dimLabels[metric.breakdownBy || 'category'] || 'Category';
+  const filterLabel = metric.filterBy?.sku_category ? ` (${metric.filterBy.sku_category})` : '';
   const isLarge = metric.size === 'lg';
 
   return (

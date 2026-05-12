@@ -21,15 +21,15 @@ function makeConfig(userId: string): DashboardConfig {
     },
     metrics: [
       {
-        id: 'total_revenue', label: 'Total Revenue', unit: 'dollars',
-        chartType: 'line', size: 'lg',
-        thresholds: { green: { max: 300000 }, yellow: { max: 200000 }, direction: 'higher-is-better' },
+        id: 'otif_rate', label: 'OTIF Rate', unit: 'percent',
+        chartType: 'gauge', size: 'lg',
+        thresholds: { green: { max: 95 }, yellow: { max: 85 }, direction: 'higher-is-better' },
         position: 0, visible: true,
       },
       {
-        id: 'avg_order_value', label: 'Avg Order Value', unit: 'dollars',
+        id: 'order_cycle_time', label: 'Order Cycle Time', unit: 'days',
         chartType: 'line', size: 'md',
-        thresholds: { green: { max: 4000 }, yellow: { max: 3000 }, direction: 'higher-is-better' },
+        thresholds: { green: { max: 7 }, yellow: { max: 10 }, direction: 'lower-is-better' },
         position: 1, visible: true,
       },
     ],
@@ -67,7 +67,7 @@ describe('PUT /api/refinement/suggestions/:id', () => {
         status: 'dismissed',
         userId: 'put-test-user',
         type: 'add_metric',
-        metricId: 'fulfillment_rate',
+        metricId: 'supplier_otd',
       }),
     });
     expect(res.status).toBe(200);
@@ -84,7 +84,7 @@ describe('PUT /api/refinement/suggestions/:id', () => {
         status: 'accepted',
         userId: 'put-test-user',
         type: 'add_metric',
-        metricId: 'avg_deal_size_value',
+        metricId: 'stockout_rate',
       }),
     });
     expect(res.status).toBe(200);
@@ -125,7 +125,7 @@ describe('Suggestion Persistence', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId,
-          metricId: 'cancelled_order_rate',
+          metricId: 'stockout_rate',
           action: 'click',
           timestamp: new Date().toISOString(),
         }),
@@ -136,7 +136,7 @@ describe('Suggestion Persistence', () => {
     const res1 = await fetch(`${baseUrl}/api/refinement/suggestions/${userId}`);
     const data1 = await res1.json();
     const suggestion = data1.suggestions.find(
-      (s: any) => s.type === 'add_metric' && s.metricId === 'cancelled_order_rate'
+      (s: any) => s.type === 'add_metric' && s.metricId === 'stockout_rate'
     );
     expect(suggestion).toBeDefined();
 
@@ -148,7 +148,7 @@ describe('Suggestion Persistence', () => {
         status: 'dismissed',
         userId,
         type: 'add_metric',
-        metricId: 'cancelled_order_rate',
+        metricId: 'stockout_rate',
       }),
     });
 
@@ -156,7 +156,7 @@ describe('Suggestion Persistence', () => {
     const res2 = await fetch(`${baseUrl}/api/refinement/suggestions/${userId}`);
     const data2 = await res2.json();
     const dismissed = data2.suggestions.find(
-      (s: any) => s.type === 'add_metric' && s.metricId === 'cancelled_order_rate'
+      (s: any) => s.type === 'add_metric' && s.metricId === 'stockout_rate'
     );
     expect(dismissed).toBeUndefined();
   });

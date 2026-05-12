@@ -317,9 +317,9 @@ export function KpiStudio({ seedPrompt, onSeedConsumed }: KpiStudioProps = {}) {
                   </svg>
                 </div>
                 <p className="text-sm font-medium text-slate-700">Describe what you want to measure</p>
-                <p className="text-xs text-slate-400 mt-1 max-w-xs">Try: "Track the percentage of Large deals by territory"</p>
+                <p className="text-xs text-slate-400 mt-1 max-w-xs">Try: "Track OTIF by destination region" or "Lane-level dwell time"</p>
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
-                  {['large deal rate by territory', 'discount depth from MSRP', 'single-item order rate', 'repeat customer rate'].map(ex => (
+                  {['OTIF by destination region', 'dwell time by warehouse', 'top 10 supplier delays', 'inventory turns by category'].map(ex => (
                     <button
                       key={ex}
                       onClick={() => { setInput(ex); }}

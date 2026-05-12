@@ -34,10 +34,11 @@ function getPresetDates(preset: number | 'mtd' | 'ytd'): { dateStart: string; da
 }
 
 export function FilterBar({ filters, onFilterChange }: FilterBarProps) {
-  const [productLines, setProductLines] = useState<string[]>([]);
-  const [countries, setCountries] = useState<string[]>([]);
-  const [territories, setTerritories] = useState<string[]>([]);
-  const [dealSizes, setDealSizes] = useState<string[]>([]);
+  const [regions, setRegions] = useState<string[]>([]);
+  const [warehouses, setWarehouses] = useState<{ id: string; name: string; region: string }[]>([]);
+  const [segments, setSegments] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [tiers, setTiers] = useState<string[]>([]);
   const [minDate, setMinDate] = useState<string | undefined>(undefined);
   const [maxDate, setMaxDate] = useState<string | undefined>(undefined);
   const [activePreset, setActivePreset] = useState<string | null>(null);
@@ -45,20 +46,22 @@ export function FilterBar({ filters, onFilterChange }: FilterBarProps) {
 
   useEffect(() => {
     getAvailableFilters().then(data => {
-      setProductLines(data.productLines);
-      setCountries(data.countries);
-      setTerritories(data.territories);
-      setDealSizes(data.dealSizes);
+      setRegions(data.regions);
+      setWarehouses(data.warehouses);
+      setSegments(data.customerSegments);
+      setCategories(data.skuCategories);
+      setTiers(data.supplierTiers);
       setMinDate(data.minDate?.slice(0, 10) ?? undefined);
       setMaxDate(data.maxDate?.slice(0, 10) ?? undefined);
     }).catch(() => {});
   }, []);
 
   const activeCount = [
-    filters.product_line,
-    filters.country,
-    filters.territory,
-    filters.deal_size,
+    filters.destination_region,
+    filters.warehouse_id,
+    filters.customer_segment,
+    filters.sku_category,
+    filters.supplier_tier,
     filters.dateStart,
     filters.dateEnd,
   ].filter(Boolean).length;
@@ -73,7 +76,6 @@ export function FilterBar({ filters, onFilterChange }: FilterBarProps) {
 
   return (
     <div className="rounded-xl bg-white border border-slate-200/60 shadow-sm">
-      {/* Top row: filter icon, label, date presets */}
       <div className="flex flex-wrap items-center gap-3 px-5 py-3 border-b border-slate-100">
         <div className="flex items-center gap-2">
           <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -89,7 +91,6 @@ export function FilterBar({ filters, onFilterChange }: FilterBarProps) {
 
         <div className="h-4 w-px bg-slate-200" />
 
-        {/* Date range presets */}
         <div className="flex items-center gap-1">
           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">Period</span>
           {DATE_PRESETS.map(preset => (
@@ -132,42 +133,50 @@ export function FilterBar({ filters, onFilterChange }: FilterBarProps) {
         </button>
       </div>
 
-      {/* Bottom row: dropdowns and custom dates */}
       {expanded && <div className="flex flex-wrap items-center gap-3 px-5 py-3">
         <select
-          value={filters.product_line || ''}
-          onChange={e => onFilterChange({ ...filters, product_line: e.target.value || undefined })}
+          value={filters.destination_region || ''}
+          onChange={e => onFilterChange({ ...filters, destination_region: e.target.value || undefined })}
           className={selectCls}
         >
-          <option value="">All Product Lines</option>
-          {productLines.map(p => <option key={p} value={p}>{p}</option>)}
+          <option value="">All Regions</option>
+          {regions.map(r => <option key={r} value={r}>{r}</option>)}
         </select>
 
         <select
-          value={filters.territory || ''}
-          onChange={e => onFilterChange({ ...filters, territory: e.target.value || undefined })}
+          value={filters.warehouse_id || ''}
+          onChange={e => onFilterChange({ ...filters, warehouse_id: e.target.value || undefined })}
           className={selectCls}
         >
-          <option value="">All Territories</option>
-          {territories.map(t => <option key={t} value={t}>{t}</option>)}
+          <option value="">All Warehouses</option>
+          {warehouses.map(w => <option key={w.id} value={w.id}>{w.region} — {w.name}</option>)}
         </select>
 
         <select
-          value={filters.country || ''}
-          onChange={e => onFilterChange({ ...filters, country: e.target.value || undefined })}
+          value={filters.customer_segment || ''}
+          onChange={e => onFilterChange({ ...filters, customer_segment: e.target.value || undefined })}
           className={selectCls}
         >
-          <option value="">All Countries</option>
-          {countries.map(c => <option key={c} value={c}>{c}</option>)}
+          <option value="">All Segments</option>
+          {segments.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
 
         <select
-          value={filters.deal_size || ''}
-          onChange={e => onFilterChange({ ...filters, deal_size: e.target.value || undefined })}
+          value={filters.sku_category || ''}
+          onChange={e => onFilterChange({ ...filters, sku_category: e.target.value || undefined })}
           className={selectCls}
         >
-          <option value="">All Deal Sizes</option>
-          {dealSizes.map(d => <option key={d} value={d}>{d}</option>)}
+          <option value="">All Categories</option>
+          {categories.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+
+        <select
+          value={filters.supplier_tier || ''}
+          onChange={e => onFilterChange({ ...filters, supplier_tier: e.target.value || undefined })}
+          className={selectCls}
+        >
+          <option value="">All Supplier Tiers</option>
+          {tiers.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
 
         <div className="h-4 w-px bg-slate-200" />

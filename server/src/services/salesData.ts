@@ -9,35 +9,89 @@ import type {
   MetricConfig,
   DashboardConfig,
   LayoutConfig,
-  ThresholdConfig,
   FilterState,
   CategoricalSnapshot,
   CategoryBreakdown,
 } from '../../../shared/types.js';
 
-function buildConditions(filters: FilterState | undefined, startIdx: number): { conditions: string[]; params: unknown[] } {
-  const conditions: string[] = [];
+// === Filter application ===
+//
+// The KPI execSql queries reference one or more fact tables (shipments, inventory_snapshots,
+// purchase_orders). Filters apply per fact table:
+//   - shipments:           destination_region, warehouse_id, dateStart/dateEnd (order_date)
+//   - inventory_snapshots: warehouse_id, dateStart/dateEnd (snapshot_date)
+//   - purchase_orders:     warehouse_id, dateStart/dateEnd (ordered_date)
+//
+// We wrap each referenced fact table in a CTE that pre-filters it, then rewrite the table
+// references to point to the CTE. This works correctly even when the SQL already has WHERE
+// clauses, JOINs, subqueries, or its own leading WITH clause.
+//
+// Filters that require joins (customer_segment, sku_category, supplier_tier) are deferred
+// to chat-driven dynamic SQL — the filter bar exposes only the simple cases.
+
+interface CteSpec { cteName: string; body: string; }
+
+function injectCtes(sql: string, ctes: CteSpec[]): string {
+  if (ctes.length === 0) return sql;
+  const cteDecls = ctes.map(c => `${c.cteName} AS (${c.body})`).join(', ');
+  if (/^\s*WITH\s/i.test(sql)) {
+    return sql.replace(/^(\s*WITH\s+)/i, `$1${cteDecls}, `);
+  }
+  return `WITH ${cteDecls}\n${sql}`;
+}
+
+function applyFilters(sql: string, filters?: FilterState): { sql: string; params: unknown[] } {
+  if (!filters) return { sql, params: [] };
+
   const params: unknown[] = [];
-  let idx = startIdx;
+  let p = 1;
+  const ctes: CteSpec[] = [];
+  let modified = sql;
 
-  if (filters?.product_line) { conditions.push(`product_line = $${idx++}`); params.push(filters.product_line); }
-  if (filters?.country) { conditions.push(`country = $${idx++}`); params.push(filters.country); }
-  if (filters?.territory) { conditions.push(`territory = $${idx++}`); params.push(filters.territory); }
-  if (filters?.deal_size) { conditions.push(`deal_size = $${idx++}`); params.push(filters.deal_size); }
-  if (filters?.dateStart) { conditions.push(`order_date >= $${idx++}`); params.push(filters.dateStart); }
-  if (filters?.dateEnd) { conditions.push(`order_date <= $${idx++}`); params.push(filters.dateEnd); }
+  // ----- shipments -----
+  if (/\bshipments\b/i.test(modified)) {
+    const conds: string[] = [];
+    if (filters.destination_region) { conds.push(`destination_region = $${p++}`); params.push(filters.destination_region); }
+    if (filters.warehouse_id) { conds.push(`warehouse_id = $${p++}`); params.push(filters.warehouse_id); }
+    if (filters.dateStart) { conds.push(`order_date >= $${p++}`); params.push(filters.dateStart); }
+    if (filters.dateEnd) { conds.push(`order_date <= $${p++}`); params.push(filters.dateEnd); }
+    if (conds.length > 0) {
+      const cteName = '_shipments_f';
+      ctes.push({ cteName, body: `SELECT * FROM shipments WHERE ${conds.join(' AND ')}` });
+      modified = modified.replace(/\bshipments\b/g, cteName);
+    }
+  }
 
-  return { conditions, params };
+  // ----- inventory_snapshots -----
+  if (/\binventory_snapshots\b/i.test(modified)) {
+    const conds: string[] = [];
+    if (filters.warehouse_id) { conds.push(`warehouse_id = $${p++}`); params.push(filters.warehouse_id); }
+    if (filters.dateStart) { conds.push(`snapshot_date >= $${p++}`); params.push(filters.dateStart); }
+    if (filters.dateEnd) { conds.push(`snapshot_date <= $${p++}`); params.push(filters.dateEnd); }
+    if (conds.length > 0) {
+      const cteName = '_inv_f';
+      ctes.push({ cteName, body: `SELECT * FROM inventory_snapshots WHERE ${conds.join(' AND ')}` });
+      modified = modified.replace(/\binventory_snapshots\b/g, cteName);
+    }
+  }
+
+  // ----- purchase_orders -----
+  if (/\bpurchase_orders\b/i.test(modified)) {
+    const conds: string[] = [];
+    if (filters.warehouse_id) { conds.push(`warehouse_id = $${p++}`); params.push(filters.warehouse_id); }
+    if (filters.dateStart) { conds.push(`ordered_date >= $${p++}`); params.push(filters.dateStart); }
+    if (filters.dateEnd) { conds.push(`ordered_date <= $${p++}`); params.push(filters.dateEnd); }
+    if (conds.length > 0) {
+      const cteName = '_po_f';
+      ctes.push({ cteName, body: `SELECT * FROM purchase_orders WHERE ${conds.join(' AND ')}` });
+      modified = modified.replace(/\bpurchase_orders\b/g, cteName);
+    }
+  }
+
+  return { sql: injectCtes(modified, ctes), params };
 }
 
-function applyFilters(baseSql: string, filters?: FilterState): { sql: string; params: unknown[] } {
-  const { conditions, params } = buildConditions(filters, 1);
-  if (conditions.length === 0) return { sql: baseSql, params: [] };
-
-  const filterClause = conditions.join(' AND ');
-  const modified = baseSql.replace(/FROM sales_orders/g, `FROM sales_orders WHERE ${filterClause}`);
-  return { sql: modified, params };
-}
+// === Single-metric query ===
 
 async function queryMetric(def: MetricDefinition, filters?: FilterState): Promise<MetricValue> {
   const { sql, params } = applyFilters(def.sql, filters);
@@ -49,7 +103,7 @@ async function queryMetric(def: MetricDefinition, filters?: FilterState): Promis
   }
   const [valueRes, trendRes] = await Promise.all(queries);
 
-  const current = parseFloat(valueRes.rows[0]?.value ?? 0);
+  const current = parseFloat(valueRes.rows[0]?.value ?? '0');
   const trend = trendRes
     ? trendRes.rows.map((r: { value: string }) => parseFloat(r.value || '0'))
     : [];
@@ -57,9 +111,9 @@ async function queryMetric(def: MetricDefinition, filters?: FilterState): Promis
   const delta = parseFloat((current - prev).toFixed(2));
 
   return {
-    current: parseFloat(current.toFixed(2)),
+    current: isFinite(current) ? parseFloat(current.toFixed(2)) : 0,
     trend,
-    delta,
+    delta: isFinite(delta) ? delta : 0,
   };
 }
 
@@ -107,11 +161,27 @@ export async function generateSnapshot(metricIds?: string[], filters?: FilterSta
   defs.forEach((d, i) => {
     const r = results[i];
     if (r.ok) metrics[d.id] = r.value;
-    // Failed metrics are omitted from the snapshot so the client can render
-    // an explicit "no data" state instead of a misleading 0.
+    // Failed metrics omitted so the client can render an explicit "no data" state.
   });
 
   return { timestamp: new Date().toISOString(), metrics };
+}
+
+// === Categorical breakdowns ===
+
+function buildShipmentWhere(filters?: FilterState): { sql: string; params: unknown[]; nextIdx: number } {
+  const conds: string[] = [];
+  const params: unknown[] = [];
+  let idx = 1;
+  if (filters?.destination_region) { conds.push(`s.destination_region = $${idx++}`); params.push(filters.destination_region); }
+  if (filters?.warehouse_id) { conds.push(`s.warehouse_id = $${idx++}`); params.push(filters.warehouse_id); }
+  if (filters?.dateStart) { conds.push(`s.order_date >= $${idx++}`); params.push(filters.dateStart); }
+  if (filters?.dateEnd) { conds.push(`s.order_date <= $${idx++}`); params.push(filters.dateEnd); }
+  return {
+    sql: conds.length ? `WHERE ${conds.join(' AND ')}` : '',
+    params,
+    nextIdx: idx,
+  };
 }
 
 export async function generateCategoricalSnapshot(
@@ -119,31 +189,62 @@ export async function generateCategoricalSnapshot(
   filters?: FilterState
 ): Promise<CategoricalSnapshot> {
   const snapshot = await generateSnapshot(metricIds, filters);
+  const where = buildShipmentWhere(filters);
 
-  const filterClause = buildFilterWhere(filters);
-
-  const [byProductLine, byCountry, byTerritory] = await Promise.all([
-    pool.query(`SELECT product_line AS label, SUM(sales) AS value FROM sales_orders ${filterClause.sql} GROUP BY product_line ORDER BY value DESC`, filterClause.params),
-    pool.query(`SELECT country AS label, SUM(sales) AS value FROM sales_orders ${filterClause.sql} GROUP BY country ORDER BY value DESC LIMIT 10`, filterClause.params),
-    pool.query(`SELECT territory AS label, SUM(sales) AS value FROM sales_orders ${filterClause.sql} GROUP BY territory ORDER BY value DESC`, filterClause.params),
+  const [byCategory, byRegion, byWarehouse, bySegment] = await Promise.all([
+    // Shipment value by SKU category
+    pool.query(
+      `SELECT sk.category AS label, SUM(sl.line_total) AS value
+       FROM shipments s
+       JOIN shipment_lines sl ON sl.shipment_id = s.shipment_id
+       JOIN skus sk ON sk.sku_id = sl.sku_id
+       ${where.sql}
+       GROUP BY sk.category ORDER BY value DESC`,
+      where.params
+    ),
+    pool.query(
+      `SELECT s.destination_region AS label, SUM(s.total_value) AS value
+       FROM shipments s
+       ${where.sql}
+       GROUP BY s.destination_region ORDER BY value DESC`,
+      where.params
+    ),
+    pool.query(
+      `SELECT s.warehouse_id AS label, SUM(s.total_value) AS value
+       FROM shipments s
+       ${where.sql}
+       GROUP BY s.warehouse_id ORDER BY value DESC`,
+      where.params
+    ),
+    pool.query(
+      `SELECT c.segment AS label, SUM(s.total_value) AS value
+       FROM shipments s
+       JOIN customers c ON c.customer_id = s.customer_id
+       ${where.sql}
+       GROUP BY c.segment ORDER BY value DESC`,
+      where.params
+    ),
   ]);
+
+  const toBreakdown = (cat: string, rows: { label: string; value: string }[]): CategoryBreakdown => ({
+    category: cat,
+    values: rows.map(r => ({ label: r.label, value: parseFloat(r.value || '0') })),
+  });
 
   return {
     timestamp: snapshot.timestamp,
     filters: filters || {},
     metrics: snapshot.metrics,
     breakdowns: {
-      byProductLine: { category: 'product_line', values: byProductLine.rows.map((r: { label: string; value: string }) => ({ label: r.label, value: parseFloat(r.value) })) },
-      byCountry: { category: 'country', values: byCountry.rows.map((r: { label: string; value: string }) => ({ label: r.label, value: parseFloat(r.value) })) },
-      byTerritory: { category: 'territory', values: byTerritory.rows.map((r: { label: string; value: string }) => ({ label: r.label, value: parseFloat(r.value) })) },
+      byCategory: toBreakdown('category', byCategory.rows),
+      byRegion: toBreakdown('destination_region', byRegion.rows),
+      byWarehouse: toBreakdown('warehouse_id', byWarehouse.rows),
+      bySegment: toBreakdown('customer_segment', bySegment.rows),
     },
   };
 }
 
-function buildFilterWhere(filters?: FilterState): { sql: string; params: unknown[] } {
-  const { conditions, params } = buildConditions(filters, 1);
-  return { sql: conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '', params };
-}
+// === Heatmap breakdown ===
 
 export interface HeatmapSnapshot {
   timestamp: string;
@@ -154,11 +255,15 @@ export interface HeatmapSnapshot {
   grid: (number | null)[][];
 }
 
-const HEATMAP_DIMS: Record<string, string> = {
-  product_line: 'product_line',
-  country: 'country',
-  territory: 'territory',
-  deal_size: 'deal_size',
+// Whitelist of supported heatmap dimensions and how to resolve them in SQL.
+// Each entry: { joinClause: SQL fragment to add to the FROM/JOIN; expr: SQL expression for the label }.
+const HEATMAP_DIMS: Record<string, { joinClause: string; expr: string }> = {
+  category:           { joinClause: 'JOIN skus sk ON sk.sku_id = sl.sku_id',         expr: 'sk.category' },
+  abc_class:          { joinClause: 'JOIN skus sk ON sk.sku_id = sl.sku_id',         expr: 'sk.abc_class' },
+  destination_region: { joinClause: '',                                              expr: 's.destination_region' },
+  warehouse_id:       { joinClause: '',                                              expr: 's.warehouse_id' },
+  customer_segment:   { joinClause: 'JOIN customers c ON c.customer_id = s.customer_id', expr: 'c.segment' },
+  customer_region:    { joinClause: 'JOIN customers c ON c.customer_id = s.customer_id', expr: 'c.region' },
 };
 
 export async function generateHeatmapBreakdown(
@@ -166,15 +271,32 @@ export async function generateHeatmapBreakdown(
   colDim: string,
   filters?: FilterState
 ): Promise<HeatmapSnapshot> {
-  const rowCol = HEATMAP_DIMS[rowDim];
-  const colCol = HEATMAP_DIMS[colDim];
-  if (!rowCol || !colCol) throw new Error(`Invalid heatmap dimensions: ${rowDim} x ${colDim}`);
+  const rowSpec = HEATMAP_DIMS[rowDim];
+  const colSpec = HEATMAP_DIMS[colDim];
+  if (!rowSpec || !colSpec) {
+    throw new Error(`Invalid heatmap dimensions: ${rowDim} x ${colDim}. Supported: ${Object.keys(HEATMAP_DIMS).join(', ')}`);
+  }
 
-  const where = buildFilterWhere(filters);
-  const sql = `SELECT ${rowCol} AS row_label, ${colCol} AS col_label, SUM(sales) AS value
-               FROM sales_orders ${where.sql}
-               GROUP BY ${rowCol}, ${colCol}
-               ORDER BY ${rowCol}, ${colCol}`;
+  const where = buildShipmentWhere(filters);
+  const joins = new Set<string>();
+  if (rowSpec.joinClause) joins.add(rowSpec.joinClause);
+  if (colSpec.joinClause) joins.add(colSpec.joinClause);
+
+  // Always need shipment_lines for value summation
+  const needsLines = rowSpec.expr.startsWith('sk.') || colSpec.expr.startsWith('sk.');
+  const lineJoin = needsLines ? 'JOIN shipment_lines sl ON sl.shipment_id = s.shipment_id' : '';
+  const valueExpr = needsLines ? 'SUM(sl.line_total)' : 'SUM(s.total_value)';
+
+  const sql = `
+    SELECT ${rowSpec.expr} AS row_label, ${colSpec.expr} AS col_label, ${valueExpr} AS value
+    FROM shipments s
+    ${lineJoin}
+    ${Array.from(joins).join('\n    ')}
+    ${where.sql}
+    GROUP BY ${rowSpec.expr}, ${colSpec.expr}
+    ORDER BY ${rowSpec.expr}, ${colSpec.expr}
+  `;
+
   const { rows } = await pool.query(sql, where.params);
 
   const rowSet = new Set<string>();
@@ -205,24 +327,32 @@ export async function generateHeatmapBreakdown(
   };
 }
 
+// === Available filter values (drives FilterBar UI) ===
+
 export async function getAvailableFilters() {
-  const [productLines, countries, territories, dealSizes, dateRange] = await Promise.all([
-    pool.query(`SELECT DISTINCT product_line FROM sales_orders ORDER BY product_line`),
-    pool.query(`SELECT DISTINCT country FROM sales_orders ORDER BY country`),
-    pool.query(`SELECT DISTINCT territory FROM sales_orders ORDER BY territory`),
-    pool.query(`SELECT DISTINCT deal_size FROM sales_orders ORDER BY deal_size`),
-    pool.query(`SELECT MIN(order_date)::text AS min_date, MAX(order_date)::text AS max_date FROM sales_orders`),
+  const [regions, warehouses, segments, categories, tiers, dateRange] = await Promise.all([
+    pool.query(`SELECT DISTINCT destination_region FROM shipments ORDER BY destination_region`),
+    pool.query(`SELECT warehouse_id, name, region FROM warehouses ORDER BY region, name`),
+    pool.query(`SELECT DISTINCT segment FROM customers ORDER BY segment`),
+    pool.query(`SELECT DISTINCT category FROM skus ORDER BY category`),
+    pool.query(`SELECT DISTINCT tier FROM suppliers ORDER BY tier`),
+    pool.query(`SELECT MIN(order_date)::text AS min_date, MAX(order_date)::text AS max_date FROM shipments`),
   ]);
 
   return {
-    productLines: productLines.rows.map((r: { product_line: string }) => r.product_line),
-    countries: countries.rows.map((r: { country: string }) => r.country),
-    territories: territories.rows.map((r: { territory: string }) => r.territory),
-    dealSizes: dealSizes.rows.map((r: { deal_size: string }) => r.deal_size),
+    regions: regions.rows.map((r: { destination_region: string }) => r.destination_region),
+    warehouses: warehouses.rows.map((r: { warehouse_id: string; name: string; region: string }) => ({
+      id: r.warehouse_id, name: r.name, region: r.region,
+    })),
+    customerSegments: segments.rows.map((r: { segment: string }) => r.segment),
+    skuCategories: categories.rows.map((r: { category: string }) => r.category),
+    supplierTiers: tiers.rows.map((r: { tier: string }) => r.tier),
     minDate: dateRange.rows[0]?.min_date ?? null,
     maxDate: dateRange.rows[0]?.max_date ?? null,
   };
 }
+
+// === Dashboard configs ===
 
 export function getCanonicalConfig(): DashboardConfig {
   const now = new Date().toISOString();
@@ -249,9 +379,9 @@ export function getCanonicalConfig(): DashboardConfig {
     updatedAt: now,
     userPrompt: '',
     interpretation: {
-      summary: 'Canonical dashboard showing all available sales metrics.',
+      summary: 'Canonical dashboard showing the full Meridian supply chain KPI library.',
       priorities: [
-        { label: 'Comprehensive Overview', weight: 1, reasoning: 'Display all metrics for full visibility.' },
+        { label: 'Comprehensive Overview', weight: 1, reasoning: 'Display all KPIs for full operational visibility.' },
       ],
     },
     metrics,
@@ -259,78 +389,105 @@ export function getCanonicalConfig(): DashboardConfig {
   };
 }
 
+// === Personas ===
+//
+// Three supply chain personas covering the spectrum of leadership in a B2B distributor.
+
 export function getPersonaConfigs(): Record<string, DashboardConfig> {
   const now = new Date().toISOString();
 
-  const salesRep: DashboardConfig = {
-    userId: 'persona-sales-rep',
+  const csco: DashboardConfig = {
+    userId: 'persona-csco',
     createdAt: now, updatedAt: now,
-    userPrompt: "I'm a sales rep -- I care about my orders, revenue, and deal sizes",
+    userPrompt: "I'm the Chief Supply Chain Officer. I care about overall customer experience, operational health, and working capital. I need a high-signal view of where the supply chain is performing and where it's slipping.",
     interpretation: {
-      summary: 'Focused on order volume, revenue generation, and deal size optimization.',
+      summary: 'Executive supply chain dashboard: customer-facing fulfillment quality, operational risk signals, and working capital efficiency.',
       priorities: [
-        { label: 'Revenue Generation', weight: 1.0, reasoning: 'Sales reps need visibility into revenue performance.' },
-        { label: 'Order Volume', weight: 0.8, reasoning: 'Tracking order flow is essential for pipeline management.' },
-        { label: 'Deal Quality', weight: 0.6, reasoning: 'Deal size indicates negotiation effectiveness.' },
+        { label: 'Customer Fulfillment', weight: 1.0, reasoning: 'OTIF and Perfect Order Rate are the headline customer-experience metrics.' },
+        { label: 'Operational Health', weight: 0.85, reasoning: 'Exception rate and cycle time reveal systemic friction.' },
+        { label: 'Working Capital', weight: 0.7, reasoning: 'Inventory turns and excess stock indicate cash trapped in the supply chain.' },
       ],
     },
     metrics: [
-      { id: 'total_revenue', label: 'Total Revenue', unit: 'dollars', chartType: 'line', size: 'lg', thresholds: { green: { max: 300000 }, yellow: { max: 200000 }, direction: 'higher-is-better' }, position: 0, visible: true },
-      { id: 'total_orders', label: 'Total Orders', unit: 'count', chartType: 'bar', size: 'md', thresholds: { green: { max: 350 }, yellow: { max: 250 }, direction: 'higher-is-better' }, position: 1, visible: true },
-      { id: 'avg_order_value', label: 'Avg Order Value', unit: 'dollars', chartType: 'line', size: 'md', thresholds: { green: { max: 4000 }, yellow: { max: 3000 }, direction: 'higher-is-better' }, position: 2, visible: true },
-      { id: 'avg_deal_size_value', label: 'Avg Deal Size', unit: 'dollars', chartType: 'area', size: 'md', thresholds: { green: { max: 4500 }, yellow: { max: 3000 }, direction: 'higher-is-better' }, position: 3, visible: true },
-      { id: 'units_sold', label: 'Units Sold', unit: 'count', chartType: 'bar', size: 'sm', thresholds: { green: { max: 35000 }, yellow: { max: 25000 }, direction: 'higher-is-better' }, position: 4, visible: true },
-      { id: 'order_frequency', label: 'Orders per Customer', unit: 'count', chartType: 'bar', size: 'sm', thresholds: { green: { max: 4 }, yellow: { max: 2 }, direction: 'higher-is-better' }, position: 5, visible: true },
+      { id: 'otif_rate', label: 'OTIF Rate', unit: 'percent', chartType: 'gauge', size: 'lg',
+        thresholds: { green: { max: 95 }, yellow: { max: 85 }, direction: 'higher-is-better' }, position: 0, visible: true },
+      { id: 'perfect_order_rate', label: 'Perfect Order Rate', unit: 'percent', chartType: 'gauge', size: 'md',
+        thresholds: { green: { max: 90 }, yellow: { max: 80 }, direction: 'higher-is-better' }, position: 1, visible: true },
+      { id: 'order_cycle_time', label: 'Order Cycle Time', unit: 'days', chartType: 'line', size: 'md',
+        thresholds: { green: { max: 7 }, yellow: { max: 10 }, direction: 'lower-is-better' }, position: 2, visible: true },
+      { id: 'inventory_turns', label: 'Inventory Turns', unit: 'turns', chartType: 'line', size: 'md',
+        thresholds: { green: { max: 8 }, yellow: { max: 5 }, direction: 'higher-is-better' }, position: 3, visible: true },
+      { id: 'exception_rate', label: 'Exception Rate', unit: 'percent', chartType: 'bar', size: 'md',
+        thresholds: { green: { max: 6 }, yellow: { max: 12 }, direction: 'lower-is-better' }, position: 4, visible: true },
+      { id: 'excess_inventory_value', label: 'Excess Inventory Value', unit: 'dollars', chartType: 'area', size: 'md',
+        thresholds: { green: { max: 500000 }, yellow: { max: 1500000 }, direction: 'lower-is-better' }, position: 5, visible: true },
     ],
     layout: { columns: 3, showCanonicalToggle: true },
   };
 
-  const director: DashboardConfig = {
-    userId: 'persona-director',
+  const warehouseDirector: DashboardConfig = {
+    userId: 'persona-warehouse-director',
     createdAt: now, updatedAt: now,
-    userPrompt: "I'm a sales director focused on fulfillment rates and territory performance",
+    userPrompt: "I'm a warehouse director. I care about throughput, accuracy, and capacity. I run the four walls and need to spot bottlenecks fast.",
     interpretation: {
-      summary: 'Strategic view focused on operational health, territory balance, and fulfillment quality.',
+      summary: 'Warehouse operations view: throughput and pick accuracy, exceptions by reason and warehouse, and capacity headroom.',
       priorities: [
-        { label: 'Fulfillment Quality', weight: 1.0, reasoning: 'Directors are accountable for order fulfillment.' },
-        { label: 'Territory Balance', weight: 0.85, reasoning: 'Revenue concentration risk across territories.' },
-        { label: 'Customer Value', weight: 0.7, reasoning: 'Revenue per customer indicates account health.' },
+        { label: 'Pick & Pack Throughput', weight: 1.0, reasoning: 'Same-day ship rate and line fill are direct measures of warehouse responsiveness.' },
+        { label: 'Order Accuracy', weight: 0.85, reasoning: 'Backorder rate and exception reasons reveal accuracy + process issues.' },
+        { label: 'Capacity', weight: 0.7, reasoning: 'Capacity utilization tells us when we need to expand or rebalance.' },
       ],
     },
     metrics: [
-      { id: 'fulfillment_rate', label: 'Fulfillment Rate', unit: 'percent', chartType: 'gauge', size: 'lg', thresholds: { green: { max: 95 }, yellow: { max: 85 }, direction: 'higher-is-better' }, position: 0, visible: true },
-      { id: 'cancelled_order_rate', label: 'Cancelled Order Rate', unit: 'percent', chartType: 'bar', size: 'lg', thresholds: { green: { max: 3 }, yellow: { max: 7 }, direction: 'lower-is-better' }, position: 1, visible: true },
-      { id: 'territory_revenue_share', label: 'Top Territory Revenue %', unit: 'percent', chartType: 'gauge', size: 'md', thresholds: { green: { max: 40 }, yellow: { max: 55 }, direction: 'lower-is-better' }, position: 2, visible: true },
-      { id: 'revenue_per_customer', label: 'Revenue per Customer', unit: 'dollars', chartType: 'line', size: 'md', thresholds: { green: { max: 120000 }, yellow: { max: 80000 }, direction: 'higher-is-better' }, position: 3, visible: true },
-      { id: 'total_revenue', label: 'Total Revenue', unit: 'dollars', chartType: 'number', size: 'sm', thresholds: { green: { max: 300000 }, yellow: { max: 200000 }, direction: 'higher-is-better' }, position: 4, visible: true },
-      { id: 'total_orders', label: 'Total Orders', unit: 'count', chartType: 'number', size: 'sm', thresholds: { green: { max: 350 }, yellow: { max: 250 }, direction: 'higher-is-better' }, position: 5, visible: true },
+      { id: 'same_day_ship_rate', label: 'Same-Day Ship Rate', unit: 'percent', chartType: 'gauge', size: 'lg',
+        thresholds: { green: { max: 60 }, yellow: { max: 40 }, direction: 'higher-is-better' }, position: 0, visible: true },
+      { id: 'line_fill_rate', label: 'Line Fill Rate', unit: 'percent', chartType: 'gauge', size: 'md',
+        thresholds: { green: { max: 96 }, yellow: { max: 90 }, direction: 'higher-is-better' }, position: 1, visible: true },
+      { id: 'backorder_rate', label: 'Backorder Rate', unit: 'percent', chartType: 'bar', size: 'md',
+        thresholds: { green: { max: 4 }, yellow: { max: 10 }, direction: 'lower-is-better' }, position: 2, visible: true },
+      { id: 'warehouse_capacity_util', label: 'Capacity Utilization', unit: 'percent', chartType: 'gauge', size: 'md',
+        thresholds: { green: { max: 75 }, yellow: { max: 88 }, direction: 'lower-is-better' }, position: 3, visible: true },
+      { id: 'exception_rate', label: 'Exception Rate', unit: 'percent', chartType: 'bar', size: 'md',
+        thresholds: { green: { max: 6 }, yellow: { max: 12 }, direction: 'lower-is-better' }, position: 4, visible: true },
+      { id: 'avg_exception_mttr', label: 'Exception MTTR', unit: 'hours', chartType: 'line', size: 'sm',
+        thresholds: { green: { max: 48 }, yellow: { max: 96 }, direction: 'lower-is-better' }, position: 5, visible: true },
     ],
     layout: { columns: 3, showCanonicalToggle: true },
   };
 
-  const executive: DashboardConfig = {
-    userId: 'persona-executive',
+  const procurementLead: DashboardConfig = {
+    userId: 'persona-procurement-lead',
     createdAt: now, updatedAt: now,
-    userPrompt: "I'm an executive tracking revenue growth and cost efficiency",
+    userPrompt: "I'm a procurement lead. I manage our supplier portfolio. I need to see who's delivering, who's slipping, and where lead times are blowing out.",
     interpretation: {
-      summary: 'Executive-level view focused on revenue trajectory, pricing, and customer lifetime value.',
+      summary: 'Procurement view: supplier reliability scoring, PO cycle time, inbound lead times, and quality.',
       priorities: [
-        { label: 'Revenue Growth', weight: 1.0, reasoning: 'Top-line growth is the primary executive metric.' },
-        { label: 'Pricing Efficiency', weight: 0.9, reasoning: 'Average price trends drive margin analysis.' },
-        { label: 'Customer Economics', weight: 0.5, reasoning: 'Revenue per customer for strategic planning.' },
+        { label: 'Supplier Reliability', weight: 1.0, reasoning: 'Supplier OTD and OTIF directly drive inbound predictability.' },
+        { label: 'Lead Time', weight: 0.85, reasoning: 'Lead time inflation is the first sign of supplier or supply-network stress.' },
+        { label: 'Quality', weight: 0.7, reasoning: 'Defect rate catches quality regression early.' },
       ],
     },
     metrics: [
-      { id: 'total_revenue', label: 'Total Revenue', unit: 'dollars', chartType: 'line', size: 'lg', thresholds: { green: { max: 300000 }, yellow: { max: 200000 }, direction: 'higher-is-better' }, position: 0, visible: true },
-      { id: 'avg_price', label: 'Avg Price per Unit', unit: 'dollars', chartType: 'line', size: 'lg', thresholds: { green: { max: 90 }, yellow: { max: 75 }, direction: 'higher-is-better' }, position: 1, visible: true },
-      { id: 'revenue_per_customer', label: 'Revenue per Customer', unit: 'dollars', chartType: 'line', size: 'md', thresholds: { green: { max: 120000 }, yellow: { max: 80000 }, direction: 'higher-is-better' }, position: 2, visible: true },
-      { id: 'fulfillment_rate', label: 'Fulfillment Rate', unit: 'percent', chartType: 'gauge', size: 'md', thresholds: { green: { max: 95 }, yellow: { max: 85 }, direction: 'higher-is-better' }, position: 3, visible: true },
-      { id: 'cancelled_order_rate', label: 'Cancelled Order Rate', unit: 'percent', chartType: 'number', size: 'sm', thresholds: { green: { max: 3 }, yellow: { max: 7 }, direction: 'lower-is-better' }, position: 4, visible: true },
+      { id: 'supplier_otd', label: 'Supplier OTD', unit: 'percent', chartType: 'gauge', size: 'lg',
+        thresholds: { green: { max: 92 }, yellow: { max: 85 }, direction: 'higher-is-better' }, position: 0, visible: true },
+      { id: 'supplier_otif', label: 'Supplier OTIF', unit: 'percent', chartType: 'gauge', size: 'md',
+        thresholds: { green: { max: 88 }, yellow: { max: 80 }, direction: 'higher-is-better' }, position: 1, visible: true },
+      { id: 'po_cycle_time', label: 'PO Cycle Time', unit: 'days', chartType: 'line', size: 'md',
+        thresholds: { green: { max: 18 }, yellow: { max: 25 }, direction: 'lower-is-better' }, position: 2, visible: true },
+      { id: 'avg_lead_time', label: 'Avg Lead Time', unit: 'days', chartType: 'line', size: 'md',
+        thresholds: { green: { max: 21 }, yellow: { max: 30 }, direction: 'lower-is-better' }, position: 3, visible: true },
+      { id: 'supplier_defect_rate', label: 'Defect Rate', unit: 'percent', chartType: 'bar', size: 'sm',
+        thresholds: { green: { max: 2 }, yellow: { max: 5 }, direction: 'lower-is-better' }, position: 4, visible: true },
+      { id: 'critical_sku_stockout_rate', label: 'Critical SKU Stockout', unit: 'percent', chartType: 'bar', size: 'sm',
+        thresholds: { green: { max: 1 }, yellow: { max: 3 }, direction: 'lower-is-better' }, position: 5, visible: true },
     ],
-    layout: { columns: 2, showCanonicalToggle: true },
+    layout: { columns: 3, showCanonicalToggle: true },
   };
 
-  return { 'sales-rep': salesRep, director, executive };
+  return {
+    csco,
+    'warehouse-director': warehouseDirector,
+    'procurement-lead': procurementLead,
+  };
 }
 
 export { getMetricDefs };

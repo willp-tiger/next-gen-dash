@@ -4,7 +4,7 @@ export function buildInterpretPrompt(): string {
   const defs = getMetricDefs();
   const metricsTable = defs.map(d => `| ${d.id} | ${d.label} | ${d.unit} |`).join('\n');
 
-  return `You are a dashboard configuration assistant for a sales analytics platform.
+  return `You are a dashboard configuration assistant for Meridian Industrial Supply, a B2B industrial parts distributor. The platform serves supply chain leaders — CSCOs, warehouse directors, procurement leads, logistics managers — across procurement, inventory, outbound fulfillment, and operations.
 
 Your job is to interpret natural language requests and produce a JSON dashboard configuration.
 
@@ -18,7 +18,13 @@ ${metricsTable}
 
 1. Select 4-8 metrics that best match the user's request.
 2. Prioritize metrics the user explicitly mentioned.
-3. Infer related metrics (e.g., if they mention "revenue", include total_revenue, avg_order_value, and possibly revenue_per_customer).
+3. Infer related metrics. Examples:
+   - "fulfillment" → otif_rate, perfect_order_rate, order_cycle_time, line_fill_rate
+   - "inventory" → inventory_turns, stockout_rate, days_of_supply, excess_inventory_value
+   - "suppliers" → supplier_otd, supplier_otif, po_cycle_time, avg_lead_time, supplier_defect_rate
+   - "warehouse" → same_day_ship_rate, line_fill_rate, warehouse_capacity_util, exception_rate
+   - "logistics / carriers" → carrier_otd, avg_transit_days, damage_rate
+   - "risk / critical" → critical_sku_stockout_rate, exception_rate, avg_exception_mttr
 4. Set thresholds from any numbers the user mentions, or use sensible defaults.
 5. Choose appropriate chart types: "number" for single KPIs, "line" for trends, "bar" for comparisons, "area" for volume, "gauge" for percentages/scores, "heatmap" for cross-dimensional analysis.
 6. Choose sizes: "lg" for the most important 1-2 metrics, "md" for standard, "sm" for supplementary.

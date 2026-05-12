@@ -2,18 +2,34 @@ import { useState } from 'react';
 import type { MetricConfig } from 'shared/types';
 
 const METRIC_DESCRIPTIONS: Record<string, string> = {
-  total_revenue: 'Sum of all sales amounts across order line items. Primary top-line revenue metric.',
-  avg_order_value: 'Mean sales amount per order line item. Indicates pricing efficiency and order quality.',
-  total_orders: 'Count of distinct orders in the period. Measures sales volume and pipeline throughput.',
-  units_sold: 'Total quantity of items ordered. Measures product movement velocity.',
-  avg_price: 'Average selling price per unit. Tracks pricing power and discount trends.',
-  fulfillment_rate: 'Percentage of order line items with Shipped status. Key operational health indicator.',
-  cancelled_order_rate: 'Percentage of orders with Cancelled status. Tracks order quality and retention risk.',
-  avg_deal_size_value: 'Average total sales value per order. Measures deal quality and upsell effectiveness.',
-  revenue_per_customer: 'Total revenue divided by distinct customers. Measures customer lifetime value.',
-  order_frequency: 'Average orders per customer. Indicates repeat purchase behavior and loyalty.',
-  product_line_count: 'Count of distinct product lines with orders. Measures catalog breadth.',
-  territory_revenue_share: 'Revenue share of the top territory. Lower means more geographic diversification.',
+  // Fulfillment
+  otif_rate: 'On-Time In-Full: % of delivered shipments arriving by promised date AND with no backordered lines. Headline customer-experience metric.',
+  perfect_order_rate: 'Strictest fulfillment metric — on-time, in-full, no exceptions, no return. Composite quality signal.',
+  order_cycle_time: 'Average days from customer order placement to delivery.',
+  line_fill_rate: '% of order lines shipped complete (no backorder). Independent of timing.',
+  backorder_rate: '% of shipped order lines with any unfilled quantity. Inverse of line fill rate.',
+  same_day_ship_rate: '% of orders shipped same calendar day as placed. Warehouse responsiveness signal.',
+  // Inventory
+  inventory_turns: 'Annualized inventory turnover ratio. Higher = more efficient working capital.',
+  days_of_supply: 'Average forward-looking days of supply across active SKU-warehouse positions.',
+  stockout_rate: '% of SKU-warehouse positions at zero on-hand inventory.',
+  excess_inventory_value: 'Total $ value of inventory in positions with > 90 days of supply.',
+  critical_sku_stockout_rate: '% of critical-path SKUs (production-stopping parts) at zero stock anywhere. Most urgent inventory signal.',
+  // Procurement
+  supplier_otd: 'Supplier On-Time Delivery: % of received POs where received_date <= promised_date.',
+  supplier_otif: 'Supplier On-Time In-Full: received on time AND with full ordered quantity.',
+  po_cycle_time: 'Average days from PO placement to receipt.',
+  avg_lead_time: 'Average promised lead time across active POs.',
+  supplier_defect_rate: '% of POs with a Quality Hold exception. Tracks inbound quality regression.',
+  // Logistics
+  carrier_otd: 'Carrier On-Time Delivery: % of shipments delivered by promised date.',
+  avg_transit_days: 'Average days from shipped to delivered.',
+  damage_rate: '% of shipments with a logged Damage exception.',
+  // Operations
+  exception_rate: '% of shipments with at least one exception event. Composite operational health.',
+  avg_exception_mttr: 'Mean time to resolve exceptions, in hours.',
+  return_rate: '% of delivered shipments with at least one return.',
+  warehouse_capacity_util: 'Pallet positions in use vs. warehouse capacity. Higher = less headroom.',
 };
 
 interface MetricTooltipProps {

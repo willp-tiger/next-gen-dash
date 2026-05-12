@@ -31,20 +31,24 @@ function getTextColor(value: number, min: number, max: number, direction: string
 }
 
 const DIM_LABELS: Record<string, string> = {
-  product_line: 'Product Line',
-  country: 'Country',
-  territory: 'Territory',
-  deal_size: 'Deal Size',
+  category: 'Category',
+  destination_region: 'Region',
+  warehouse_id: 'Warehouse',
+  customer_segment: 'Segment',
+  abc_class: 'ABC Class',
+  supplier_tier: 'Supplier Tier',
 };
 
 export function HeatMapChart({ metric, onClick }: HeatMapChartProps) {
   const [snapshot, setSnapshot] = useState<HeatmapSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const rowDim = metric.breakdownBy === 'territory' || metric.breakdownBy === 'country' || metric.breakdownBy === 'deal_size'
-    ? 'product_line'
-    : (metric.breakdownBy ?? 'product_line');
-  const colDim = rowDim === 'product_line' ? 'territory' : 'product_line';
+  // Default row × col when breakdownBy points to a single dim or is missing:
+  // category × destination_region is the most informative for shipment value.
+  const rowDim = metric.breakdownBy && metric.breakdownBy !== 'destination_region'
+    ? metric.breakdownBy
+    : 'category';
+  const colDim = rowDim === 'category' ? 'destination_region' : 'category';
 
   const fetchData = useCallback(async () => {
     try {

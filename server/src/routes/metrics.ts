@@ -1,8 +1,28 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { generateSnapshot, getCanonicalConfig, generateCategoricalSnapshot, generateHeatmapBreakdown, getAvailableFilters, getPersonaConfigs } from '../services/salesData.js';
+import {
+  generateSnapshot,
+  getCanonicalConfig,
+  generateCategoricalSnapshot,
+  generateHeatmapBreakdown,
+  getAvailableFilters,
+  getPersonaConfigs,
+} from '../services/salesData.js';
+import type { FilterState } from '../../../shared/types.js';
 
 const router = Router();
+
+function parseFilters(req: Request): FilterState {
+  return {
+    destination_region: req.query.destination_region as string | undefined,
+    warehouse_id: req.query.warehouse_id as string | undefined,
+    customer_segment: req.query.customer_segment as string | undefined,
+    sku_category: req.query.sku_category as string | undefined,
+    supplier_tier: req.query.supplier_tier as string | undefined,
+    dateStart: req.query.dateStart as string | undefined,
+    dateEnd: req.query.dateEnd as string | undefined,
+  };
+}
 
 router.get('/', async (req: Request, res: Response) => {
   try {
@@ -11,16 +31,7 @@ router.get('/', async (req: Request, res: Response) => {
       ? metricIdsParam.split(',').map((id) => id.trim())
       : undefined;
 
-    const filters = {
-      product_line: req.query.product_line as string | undefined,
-      country: req.query.country as string | undefined,
-      territory: req.query.territory as string | undefined,
-      deal_size: req.query.deal_size as string | undefined,
-      dateStart: req.query.dateStart as string | undefined,
-      dateEnd: req.query.dateEnd as string | undefined,
-    };
-
-    const snapshot = await generateSnapshot(metricIds, filters);
+    const snapshot = await generateSnapshot(metricIds, parseFilters(req));
     res.json(snapshot);
   } catch (err) {
     console.error('Metrics error:', err);
@@ -61,16 +72,7 @@ router.get('/categorical', async (req: Request, res: Response) => {
       ? metricIdsParam.split(',').map((id) => id.trim())
       : undefined;
 
-    const filters = {
-      product_line: req.query.product_line as string | undefined,
-      country: req.query.country as string | undefined,
-      territory: req.query.territory as string | undefined,
-      deal_size: req.query.deal_size as string | undefined,
-      dateStart: req.query.dateStart as string | undefined,
-      dateEnd: req.query.dateEnd as string | undefined,
-    };
-
-    const snapshot = await generateCategoricalSnapshot(metricIds, filters);
+    const snapshot = await generateCategoricalSnapshot(metricIds, parseFilters(req));
     res.json(snapshot);
   } catch (err) {
     console.error('Categorical error:', err);
@@ -80,17 +82,9 @@ router.get('/categorical', async (req: Request, res: Response) => {
 
 router.get('/heatmap', async (req: Request, res: Response) => {
   try {
-    const row = (req.query.row as string | undefined) || 'product_line';
-    const col = (req.query.col as string | undefined) || 'territory';
-    const filters = {
-      product_line: req.query.product_line as string | undefined,
-      country: req.query.country as string | undefined,
-      territory: req.query.territory as string | undefined,
-      deal_size: req.query.deal_size as string | undefined,
-      dateStart: req.query.dateStart as string | undefined,
-      dateEnd: req.query.dateEnd as string | undefined,
-    };
-    const snapshot = await generateHeatmapBreakdown(row, col, filters);
+    const row = (req.query.row as string | undefined) || 'category';
+    const col = (req.query.col as string | undefined) || 'destination_region';
+    const snapshot = await generateHeatmapBreakdown(row, col, parseFilters(req));
     res.json(snapshot);
   } catch (err) {
     console.error('Heatmap error:', err);

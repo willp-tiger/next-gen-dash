@@ -3,22 +3,23 @@ import { AVAILABLE_METRICS } from '../shared/types.js';
 
 describe('Shared Types', () => {
   describe('AVAILABLE_METRICS', () => {
-    it('contains exactly 12 metric IDs', () => {
-      expect(AVAILABLE_METRICS).toHaveLength(12);
+    it('contains the full Meridian supply chain KPI library', () => {
+      // Library spans Fulfillment / Inventory / Procurement / Logistics / Operations.
+      expect(AVAILABLE_METRICS.length).toBeGreaterThanOrEqual(20);
     });
 
     it('all IDs are unique', () => {
-      expect(new Set(AVAILABLE_METRICS).size).toBe(12);
+      expect(new Set(AVAILABLE_METRICS).size).toBe(AVAILABLE_METRICS.length);
     });
 
-    it('contains expected core metrics', () => {
-      expect(AVAILABLE_METRICS).toContain('total_revenue');
-      expect(AVAILABLE_METRICS).toContain('avg_order_value');
-      expect(AVAILABLE_METRICS).toContain('total_orders');
-      expect(AVAILABLE_METRICS).toContain('units_sold');
-      expect(AVAILABLE_METRICS).toContain('fulfillment_rate');
-      expect(AVAILABLE_METRICS).toContain('cancelled_order_rate');
-      expect(AVAILABLE_METRICS).toContain('avg_deal_size_value');
+    it('contains the tier-1 supply chain KPIs', () => {
+      expect(AVAILABLE_METRICS).toContain('otif_rate');
+      expect(AVAILABLE_METRICS).toContain('perfect_order_rate');
+      expect(AVAILABLE_METRICS).toContain('inventory_turns');
+      expect(AVAILABLE_METRICS).toContain('stockout_rate');
+      expect(AVAILABLE_METRICS).toContain('supplier_otd');
+      expect(AVAILABLE_METRICS).toContain('carrier_otd');
+      expect(AVAILABLE_METRICS).toContain('exception_rate');
     });
 
     it('all IDs are snake_case strings', () => {

@@ -97,8 +97,8 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
   };
 
   const QUICK_ACTIONS = [
-    'Add a revenue breakdown by territory',
-    'Show me cancellation trends as a chart',
+    'Break down OTIF by destination region',
+    'Show me exception rate as a trend',
     'Remove the least important metric',
     'Filter dashboard to EMEA only',
   ];
@@ -249,7 +249,7 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 disabled={isLoading}
-                placeholder="e.g., Add a revenue breakdown by territory"
+                placeholder="e.g., Break down OTIF by destination region"
                 aria-label="Dashboard modification request"
                 className="flex-1 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm placeholder-slate-400 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/10 disabled:bg-slate-50 transition"
               />

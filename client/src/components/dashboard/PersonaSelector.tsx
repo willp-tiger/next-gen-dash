@@ -8,20 +8,20 @@ interface PersonaSelectorProps {
 }
 
 const PERSONA_META: Record<string, { icon: string; label: string; description: string }> = {
-  'sales-rep': {
-    icon: 'M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z',
-    label: 'Sales Rep',
-    description: 'Revenue, orders, deal sizes',
-  },
-  director: {
-    icon: 'M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6',
-    label: 'Sales Director',
-    description: 'Fulfillment, territory performance',
-  },
-  executive: {
+  csco: {
     icon: 'M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941',
-    label: 'Executive',
-    description: 'Revenue growth, pricing efficiency',
+    label: 'Chief Supply Chain Officer',
+    description: 'OTIF, working capital, operational health',
+  },
+  'warehouse-director': {
+    icon: 'M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m4.5-6h1.5m-1.5 3h1.5m-1.5 3h1.5M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21',
+    label: 'Warehouse Director',
+    description: 'Throughput, accuracy, capacity',
+  },
+  'procurement-lead': {
+    icon: 'M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6',
+    label: 'Procurement Lead',
+    description: 'Supplier OTD, lead time, quality',
   },
 };
 
