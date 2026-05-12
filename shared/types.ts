@@ -135,7 +135,11 @@ export interface MetricsSnapshot {
 export interface MetricValue {
   current: number;
   trend: number[];
+  /** Absolute change vs the previous trend point, in the metric's own units (dollars, days, percentage points). */
   delta: number;
+  /** Relative change vs the previous trend point, expressed as a percent. Use this for the
+   *  "X%" badge so dollar/day/turn metrics don't mislabel absolute deltas as percentages. */
+  deltaPct: number;
   /** Optional comparison vs prior period / prior year, populated when FilterState.compareTo is set. */
   comparison?: {
     previous: number;

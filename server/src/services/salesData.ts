@@ -249,11 +249,19 @@ async function queryMetric(def: MetricDefinition, filters?: FilterState): Promis
     : [];
   const prev = trend.length >= 2 ? trend[trend.length - 2] : current;
   const delta = parseFloat((current - prev).toFixed(2));
+  // Relative percent change so the UI can label deltas correctly. `delta` is in the metric's
+  // own units (dollars, days, percentage points), but tile chrome appends a `%` sign — without
+  // a separate pct field, "$380k change" would render as "380000.0%". Falls back to 0 when
+  // the prior value is 0 (no meaningful relative change).
+  const deltaPct = prev !== 0 && isFinite(prev)
+    ? parseFloat(((delta / Math.abs(prev)) * 100).toFixed(1))
+    : 0;
 
   const value: MetricValue = {
     current: isFinite(current) ? parseFloat(current.toFixed(2)) : 0,
     trend,
     delta: isFinite(delta) ? delta : 0,
+    deltaPct,
   };
 
   if (cmpRes && compareShift && compareBasis) {

@@ -214,7 +214,7 @@ export function MetricDetailDrawer({
                     <svg className={`h-3.5 w-3.5 ${value.delta >= 0 ? '' : 'rotate-180'}`} fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
                     </svg>
-                    {formatDelta(value.delta)}
+                    {formatDelta(value.deltaPct)}
                   </span>
                   <span className="text-[10px] text-slate-400">vs prior period</span>
                   {targetDelta && hasExplicitTarget && (

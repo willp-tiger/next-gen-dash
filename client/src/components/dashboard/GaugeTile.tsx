@@ -101,7 +101,7 @@ export function GaugeTile({ metric, value, userId, onClick }: GaugeTileProps) {
                 {formatValue(value.current, metric.unit)}
               </span>
               <span className={`mt-1 text-xs font-semibold ${deltaColor}`}>
-                {formatDelta(value.delta)}
+                {formatDelta(value.deltaPct)}
               </span>
             </div>
           </div>

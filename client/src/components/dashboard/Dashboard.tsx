@@ -572,7 +572,7 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
                       <svg className={`h-3 w-3 ${deltaPositive ? '' : 'rotate-180'}`} fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
                       </svg>
-                      {Math.abs(val.delta).toFixed(1)}%
+                      {Math.abs(val.deltaPct).toFixed(1)}%
                     </span>
                     <span className="text-[10px] text-slate-400">vs prior</span>
                   </div>

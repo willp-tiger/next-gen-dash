@@ -184,7 +184,7 @@ export function ChartTile({ metric, value, userId, onClick }: ChartTileProps) {
             {formatValue(value.current, metric.unit)}
           </span>
           <span className={`text-sm font-semibold ${deltaColor}`}>
-            {formatDelta(value.delta)}
+            {formatDelta(value.deltaPct)}
           </span>
         </div>
 

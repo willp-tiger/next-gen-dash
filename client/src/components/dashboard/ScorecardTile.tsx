@@ -22,7 +22,7 @@ const STROKE: Record<string, string> = {
  * Scorecard widget — number + sparkline + comparison badge + target track.
  *
  * Three deltas can stack here:
- *   - vs prior period / year (from MetricValue.comparison or value.delta fallback)
+ *   - vs prior period / year (from MetricValue.comparison.deltaPct or value.deltaPct fallback)
  *   - vs target (when MetricConfig.target is set — Director-facing "vs commitment")
  *   - the sparkline reference line at target
  */
@@ -37,7 +37,7 @@ export function ScorecardTile({ metric, value, userId, onClick }: ScorecardTileP
   const direction = metric.thresholds.direction;
   const isGood = (delta: number) => direction === 'lower-is-better' ? delta <= 0 : delta >= 0;
 
-  const cmpDelta = comparison?.deltaPct ?? value.delta;
+  const cmpDelta = comparison?.deltaPct ?? value.deltaPct;
   const cmpAbs = comparison?.deltaAbs;
   const cmpLabel = comparison?.basisLabel ?? 'vs prior period';
   const good = isGood(cmpDelta);
