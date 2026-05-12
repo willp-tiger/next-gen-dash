@@ -60,12 +60,6 @@ export function applyFilters(sql: string, filters?: FilterState): { sql: string;
   const ctes: CteSpec[] = [];
   let modified = sql;
 
-  // "Dimension" filters = anything other than the date range. We use these to decide
-  // whether to cross-filter exceptions/returns by shipment_id or po_id below.
-  const hasShipmentsDim = !!(filters.destination_region || filters.warehouse_id
-    || filters.customer_segment || filters.sku_category || filters.supplier_tier);
-  const hasPoDim = !!(filters.warehouse_id || filters.sku_category || filters.supplier_tier);
-
   // ----- shipments -----
   if (/\bshipments\b/i.test(modified)) {
     const conds: string[] = [];
@@ -135,9 +129,12 @@ export function applyFilters(sql: string, filters?: FilterState): { sql: string;
   }
 
   // ----- exceptions -----
-  // Cross-filter via the already-built shipments/PO CTEs when a non-date dimension is set,
-  // so the numerator of exception_rate / damage_rate / supplier_defect_rate stays scoped
-  // to the same population as the denominator.
+  // Cross-filter via the already-built shipments/PO CTEs whenever they exist, so the
+  // numerator of exception_rate / damage_rate / supplier_defect_rate / return_rate stays
+  // scoped to the same population as the denominator. This matters even for date-only
+  // filters: returns and exceptions logged in a window can be linked to shipments outside
+  // the window, which inflates the numerator. (e.g. return_date in the last 7 days for a
+  // shipment that delivered weeks ago.)
   if (/\bexceptions\b/i.test(modified)) {
     const conds: string[] = [];
     if (filters.dateStart) { conds.push(`event_date >= $${p++}`); params.push(filters.dateStart); }
@@ -145,10 +142,10 @@ export function applyFilters(sql: string, filters?: FilterState): { sql: string;
     const shipmentsCte = ctes.find(c => c.cteName === '_shipments_f');
     const poCte = ctes.find(c => c.cteName === '_po_f');
     const linkConds: string[] = [];
-    if (hasShipmentsDim && shipmentsCte) {
+    if (shipmentsCte) {
       linkConds.push(`shipment_id IN (SELECT shipment_id FROM _shipments_f)`);
     }
-    if (hasPoDim && poCte) {
+    if (poCte) {
       linkConds.push(`po_id IN (SELECT po_id FROM _po_f)`);
     }
     if (linkConds.length > 0) {
@@ -175,7 +172,7 @@ export function applyFilters(sql: string, filters?: FilterState): { sql: string;
       params.push(filters.sku_category);
     }
     const shipmentsCte = ctes.find(c => c.cteName === '_shipments_f');
-    if (hasShipmentsDim && shipmentsCte) {
+    if (shipmentsCte) {
       conds.push(`shipment_id IN (SELECT shipment_id FROM _shipments_f)`);
     }
     if (conds.length > 0) {

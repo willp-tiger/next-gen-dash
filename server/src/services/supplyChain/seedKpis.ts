@@ -261,7 +261,8 @@ inv AS (
 SELECT cogs.cogs_proxy / NULLIF(inv.avg_value, 0) * (365.0 / GREATEST((SELECT MAX(snapshot_date) - MIN(snapshot_date) FROM production.supply_chain.inventory_snapshots), 1)) AS value
 FROM cogs, inv`,
     execSql: `WITH cogs AS (
-  SELECT SUM(sl.qty_shipped * sk.unit_cost) AS cogs_proxy
+  SELECT SUM(sl.qty_shipped * sk.unit_cost) AS cogs_proxy,
+         GREATEST(MAX(s.order_date) - MIN(s.order_date) + 1, 1) AS span_days
   FROM shipment_lines sl
   JOIN shipments s ON s.shipment_id = sl.shipment_id
   JOIN skus sk ON sk.sku_id = sl.sku_id
@@ -276,7 +277,8 @@ inv AS (
     GROUP BY inv.snapshot_date
   ) daily
 )
-SELECT (cogs.cogs_proxy / NULLIF(inv.avg_value, 0)) AS value FROM cogs, inv`,
+SELECT (cogs.cogs_proxy / NULLIF(inv.avg_value, 0)) * (365.0 / cogs.span_days) AS value
+FROM cogs, inv`,
     trendSql: `WITH monthly_cogs AS (
   SELECT DATE_TRUNC('month', s.order_date) AS month,
          SUM(sl.qty_shipped * sk.unit_cost) AS cogs_proxy

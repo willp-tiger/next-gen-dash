@@ -88,8 +88,8 @@ describe('applyFilters — dimension filters', () => {
   });
 });
 
-describe('applyFilters — cross-filtering exceptions by shipment/PO dimensions', () => {
-  it('restricts exceptions to those linked to the filtered shipments when a non-date shipments dimension is active', () => {
+describe('applyFilters — cross-filtering exceptions by shipment/PO', () => {
+  it('restricts exceptions to those linked to the filtered shipments when a region filter is active', () => {
     const { sql } = applyFilters(EXCEPTION_RATE_SQL, {
       destination_region: 'EMEA',
     });
@@ -98,16 +98,19 @@ describe('applyFilters — cross-filtering exceptions by shipment/PO dimensions'
     expect(sql).toContain('shipment_id IN (SELECT shipment_id FROM _shipments_f)');
   });
 
-  it('does NOT cross-filter exceptions when only a date filter is active', () => {
+  it('cross-filters exceptions even when only a date filter is active', () => {
+    // Returns and exceptions logged in a window can be linked to shipments delivered
+    // weeks earlier. Without the cross-filter, return_rate over a 7d window inflates
+    // to >60% because numerator (returns in window) and denominator (shipments in
+    // window) sample different populations.
     const { sql } = applyFilters(EXCEPTION_RATE_SQL, {
       dateStart: '2025-01-01', dateEnd: '2025-01-31',
     });
     expect(sql).toContain('_exceptions_f');
-    // No shipment_id cross-filter — exceptions filtered by event_date alone.
-    expect(sql).not.toContain('shipment_id IN (SELECT shipment_id FROM _shipments_f)');
+    expect(sql).toContain('shipment_id IN (SELECT shipment_id FROM _shipments_f)');
   });
 
-  it('cross-filters exceptions by both shipment AND PO when both have dim filters (OR-joined)', () => {
+  it('cross-filters exceptions by both shipment AND PO via OR when both CTEs exist', () => {
     const sql_in = `SELECT COUNT(*) FROM exceptions e JOIN shipments s ON s.shipment_id = e.shipment_id JOIN purchase_orders p ON p.po_id = e.po_id`;
     const { sql } = applyFilters(sql_in, {
       warehouse_id: 'WH-EMEA-02',
@@ -119,7 +122,7 @@ describe('applyFilters — cross-filtering exceptions by shipment/PO dimensions'
 });
 
 describe('applyFilters — returns cross-filtering', () => {
-  it('cross-filters returns by shipment_id when a non-date dimension is active', () => {
+  it('cross-filters returns by shipment_id when shipments CTE exists (incl. date-only filter)', () => {
     const { sql } = applyFilters(RETURN_RATE_SQL, {
       destination_region: 'NA',
     });
@@ -134,6 +137,16 @@ describe('applyFilters — returns cross-filtering', () => {
     expect(sql).toContain('_returns_f');
     expect(sql).toMatch(/customer_id IN \(SELECT customer_id FROM customers WHERE segment =/);
     expect(params).toContain('Enterprise');
+  });
+
+  it('keeps numerator and denominator on the same shipments under a date-only filter', () => {
+    // The bug this guards: pre-fix return_rate on 7d returned 64% because returns were
+    // filtered by return_date (any matching shipment) while denominator was filtered by
+    // order_date. Cross-filter forces both to the same shipment population.
+    const { sql } = applyFilters(RETURN_RATE_SQL, {
+      dateStart: '2025-01-01', dateEnd: '2025-01-07',
+    });
+    expect(sql).toContain('shipment_id IN (SELECT shipment_id FROM _shipments_f)');
   });
 });
 

@@ -6,6 +6,37 @@ import { seedDimensions } from './supplyChain/seedDimensions.js';
 import { seedFacts } from './supplyChain/seedFacts.js';
 import { seedKpiLibrary, SUPPLY_CHAIN_KPIS } from './supplyChain/seedKpis.js';
 
+// Idempotent fixups for KPI execSql definitions that have shipped to existing DBs.
+// Each entry rewrites the runnable SQL for a KPI without bumping its version. Add a row
+// here when a KPI's execSql is wrong in the seed and we need every existing DB to pick
+// up the corrected version on next boot.
+const KPI_EXEC_SQL_FIXUPS: { kpiId: string; expected: string; replacement: string }[] = [
+  {
+    // inventory_turns must annualize so 30d / 7d / YTD windows show comparable values
+    // against the (annualized) green threshold of 8.
+    kpiId: 'inventory_turns',
+    expected: 'WITH cogs AS',
+    replacement: SUPPLY_CHAIN_KPIS.find(k => k.kpiId === 'inventory_turns')?.execSql ?? '',
+  },
+];
+
+async function applyKpiFixups(): Promise<void> {
+  for (const fix of KPI_EXEC_SQL_FIXUPS) {
+    if (!fix.replacement) continue;
+    const { rows } = await pool.query(
+      `SELECT exec_sql FROM kpi_definitions WHERE kpi_id = $1`,
+      [fix.kpiId]
+    );
+    if (rows.length === 0) continue;
+    if (rows[0].exec_sql === fix.replacement) continue;
+    await pool.query(
+      `UPDATE kpi_definitions SET exec_sql = $1 WHERE kpi_id = $2`,
+      [fix.replacement, fix.kpiId]
+    );
+    console.log(`Applied execSql fixup for KPI: ${fix.kpiId}`);
+  }
+}
+
 // Set RESET_DATA=true env var to force a full wipe + reseed on next boot.
 // Default behavior is idempotent: only seeds if tables are empty.
 const FORCE_RESET = process.env.RESET_DATA === 'true';
@@ -121,6 +152,9 @@ export async function runMigrations(): Promise<void> {
 
   // 8. Apply column comments (idempotent, drives Claude's schema awareness)
   await applyColumnComments();
+
+  // 9. Apply idempotent fixups to KPI execSql for already-seeded DBs
+  await applyKpiFixups();
 
   console.log('=== Migrations: complete ===');
 }
