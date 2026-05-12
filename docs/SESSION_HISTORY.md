@@ -1,5 +1,79 @@
 # Session History
 
+## Session 2026-05-12 (evening): Filter correctness pass + Phase 4.5 widget batch
+
+**Goal:** Validate Phase 4 widgets in the browser, fix filter behavior the user flagged ("filters still don't feel like they work"), then ship the next 4 widget types from the Phase 4.5 list.
+
+**Completed Tasks:**
+
+### 1. Filter correctness — three commits
+
+- **`108ee43` — date filtering on `exceptions`/`returns` + dimension wiring.** Five KPIs (`exception_rate`, `damage_rate`, `return_rate`, `supplier_defect_rate`, `avg_exception_mttr`) silently broke under any timeframe filter because `applyFilters` never wrapped the `exceptions` or `returns` tables in CTEs. Numerator counted all-time events while denominator was scoped to the date window, inflating rates past 100% on short windows. Also wired the previously-stubbed `customer_segment` / `sku_category` / `supplier_tier` filter-bar selects through the existing fact-table CTEs via subquery-IN conditions on `customers` / `skus` / `suppliers`. Added a pre-existing `injectCtes` bug fix: it used `String.replace` with a string template, so a `$1` SQL parameter placeholder inside an injected CTE body got interpreted as a regex backreference whenever the source SQL had a leading `WITH` clause.
+
+- **`4f2887f` — cross-filter under date-only + annualize inventory_turns.** Browser verification revealed two more issues. (a) `return_rate` showed 64% on a 7d window because returns logged in the last 7 days were being matched against shipments delivered weeks earlier — extended cross-filtering to apply whenever the shipments/PO CTEs exist, not just when a non-date dim filter is active. (b) `inventory_turns` returned per-window ratios (0.17 on 30d, 0.03 on 7d) but the green threshold is 8 turns/year, so it always read as catastrophically broken. Added `× (365 / span_days)` annualization to the execSql; updated both the seed file and added an idempotent KPI-execSql fixup step in `migrate.ts` so existing DBs pick up the corrected SQL on next boot.
+
+- **`10b39b6` — ignore stale /api/metrics responses on rapid filter change.** Real root cause of the user's perception. Rapid clicks across filter presets fire correct, date-scoped requests, but responses arrive out of order: the slower no-dates initial mount fetch returns AFTER user-clicked filtered fetches and overwrites the snapshot with stale all-time data. Inlined the fetch into its `useEffect` with a closure-local `cancelled` flag so late-arriving responses from cancelled effects are silently dropped. Same pattern handles React StrictMode double-invocation in dev.
+
+### 2. Phase 4.5 widget batch — `fe250be`
+
+Four new widgets, plus a React duplicate-key fix:
+
+- **WaterfallTile** — OTIF change-decomposition bridge (Prior → On-time impact → In-full impact → Other → Current). Backend `generateOtifWaterfall` queries OTIF components for current and prior windows; on-time / in-full deltas are direct percentage-point shifts; the interaction term lands in "Other" so the bridge closes exactly. SVG-rendered stacked bars with running totals and signed-color labels.
+- **TopNTile** — ranked list with embedded data bars. Procurement metrics (`supplier_otd`, `supplier_otif`, `po_cycle_time`, `supplier_defect_rate`, `avg_lead_time`) route to a separate `purchase_orders` aggregation path so per-supplier values reflect real OTD/lead-time, not shipment value. Other metrics use the shared `pivotValueExprFor()` shipment-level expression. `HAVING COUNT(*) >= 5` for procurement so a single-PO supplier doesn't score 100%.
+- **BulletTile** — compact actual-vs-target with qualitative bands derived from the metric's existing thresholds. No new SQL — uses the standard snapshot endpoint for the value and composes bands via `buildBulletSnapshot`. Direction-aware (lower-is-better inverts band order).
+- **CalendarHeatmapTile** — 7×52 weekday × week intensity grid. Backend supports `shipments_per_day` and `exceptions_per_day` sources. Anchors to last 365 days when no date filter is set; respects all dimension filters. Color scale: slate-50 → accent.
+
+Plus:
+- React duplicate-key warning fix: a metric id alone collides when multiple tiles share the same metric (e.g. scorecard + waterfall + bullet for OTIF). Added `tileKey(metric)` composing id + chartType + position + variant config; applied to all five `.map()` sites in Dashboard.tsx.
+- Chat duplicate-detection extended: keys widget variants on their config (`waterfall.source`, `topN.dimension/n/ascending`, `calendar.source`) so users can add multiple configurations of the same metric without false-positive blocks.
+- Claude prompts (`interpret.ts` + `dashboardChat.ts`) updated with capabilities + JSON examples for each new widget.
+
+**Technical Decisions:**
+- **Annualize via `MAX(order_date) - MIN(order_date)` not the user's filter window.** The shipments CTE is already date-filtered, so MAX/MIN within `_shipments_f` gives the actual data span, which handles edge cases like sparse weekends or missing days correctly. Falls back to all-time span (~365 days) when no filter is applied.
+- **Procurement metrics get their own top-N path, not pivot's shipment-based expressions.** Ranking suppliers by `supplier_otd` via shipments would compute "supplier presence in shipments" instead of "supplier on-time rate," which is misleading. The procurement path queries `purchase_orders` directly with the canonical OTD/OTIF/cycle-time formulas.
+- **Bullet has no separate fetch endpoint.** Built `buildBulletSnapshot(metricId, actual)` that takes a value and composes the bands. The route fetches the value via `generateSnapshot([metricId], filters)` so all filter machinery (date, dimension, compareTo) applies consistently with the rest of the dashboard.
+- **Closure-local `cancelled` flag, not AbortController.** Aborting the HTTP request would save bandwidth but the failing test was the React state race, not network capacity. The flag pattern is also smaller (no signal plumbing through `getMetrics`), and the StrictMode dev double-invoke is handled the same way.
+
+**Files Created:**
+- `client/src/components/dashboard/WaterfallTile.tsx`
+- `client/src/components/dashboard/TopNTile.tsx`
+- `client/src/components/dashboard/BulletTile.tsx`
+- `client/src/components/dashboard/CalendarHeatmapTile.tsx`
+- `tests/applyFilters.test.ts`
+- `tests/widgetsBatch2.test.ts`
+
+**Files Modified:**
+- `shared/types.ts` (waterfall/top_n/bullet/calendar_heatmap chart types + config + snapshot shapes)
+- `server/src/services/salesData.ts` (exceptions/returns CTEs, dimension filters, cross-filter rule, `injectCtes` regex backreference fix, `shiftFiltersForComparison` exported)
+- `server/src/services/widgets.ts` (waterfall, top-N, bullet, calendar generators)
+- `server/src/services/migrate.ts` (idempotent KPI execSql fixup step)
+- `server/src/services/supplyChain/seedKpis.ts` (annualized inventory_turns SQL)
+- `server/src/routes/widgets.ts` (4 new endpoints)
+- `server/src/routes/dashboardChat.ts` (extended duplicate-detection)
+- `server/src/prompts/interpret.ts` + `prompts/dashboardChat.ts` (new widget capabilities + examples)
+- `client/src/api/client.ts` (new fetch wrappers)
+- `client/src/components/dashboard/Dashboard.tsx` (closure-cancelled fetch effect, `tileKey()`, render dispatch for 4 new widgets)
+
+**Verified:**
+- 110 tests passing (84 prior session + 26 new this session: 16 in `tests/applyFilters.test.ts`, 10 in `tests/widgets.test.ts` from the previous session, 5 in `tests/widgetsBatch2.test.ts`).
+- Server `tsc` and client `tsc -b && vite build` clean.
+- API-level: probed `/api/metrics` across Today/7d/30d/MTD/YTD/Q1/Q4 + dimension combos for each persona — values are coherent (Q4 EMEA shows the APAC + EMEA anomaly bite as expected; Strategic suppliers OTD 64% vs Tactical 57%).
+- Browser-level: Playwright registered a fresh user, switched to CSCO persona, walked the timeframe presets — 7d / 30d / YTD / 7d-replay all show their correct API values now (race condition fix verified). Then added all 4 new widgets via dashboard chat — they render correctly against seeded Meridian data with the expected values (waterfall Net Δ -2.52pts, Top 10 suppliers 70-71% OTD, OTIF bullet 47.9%, calendar heatmap 365 cells).
+
+**Open / Outstanding:**
+- **Performance.** `perfect_order_rate` takes ~7s on Railway-hosted Postgres because of three EXISTS subqueries against `shipments`/`exceptions`/`returns`/`shipment_lines` per delivered shipment. Pre-existing — not caused by this session's changes — but very visible in the demo (initial dashboard load hangs in skeleton state for ~7 seconds). Worth tackling before the showcase: either add a covering index, materialize a `perfect_order_flag` column, or cache the value with a TTL.
+- **Phase 4.5 second half:** Cohort retention grid, Status grid, Stacked area, Markdown text tile (renderer needs polish — currently just a `<p>` block). 4 widgets remaining from the original Phase 4.5 list.
+- **Phase 5: Showcase dashboard.** "Q4 2025 Global Supply Chain Performance Review" CSCO view as a sectioned dashboard. Sections: Headline (4 scorecards) / What Changed (annotated trend + waterfall) / Where (pivot + status grid) / Customer & Pipeline (funnel + cohort + top-N) / Operations (bullet + calendar heatmap + stacked area). Wire as the default landing for the CSCO persona.
+
+**Git Commits (this session):**
+- `108ee43` — fix(filters): scope exceptions/returns by date + wire segment/category/tier
+- `4f2887f` — fix(filters): cross-filter exceptions/returns under date-only + annualize inventory_turns
+- `10b39b6` — fix(dashboard): ignore stale /api/metrics responses on rapid filter change
+- `fe250be` — feat(widgets): Phase 4.5 batch — waterfall, top-N, bullet, calendar heatmap
+- (this commit) — docs: session 2026-05-12 evening — filter correctness + Phase 4.5
+
+---
+
 ## Session 2026-05-12 (afternoon): Phase 4 widget library expansion — first batch
 
 **Goal:** Raise the widget ceiling so chat-authored dashboards read as enterprise BI work, not basic demo output. Build the recommended first batch (Scorecard + Annotated time series + Pivot + Funnel + sectioned layout + filter-bar compareTo toggle).
