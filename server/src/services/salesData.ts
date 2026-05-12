@@ -17,17 +17,26 @@ import type {
 // === Filter application ===
 //
 // The KPI execSql queries reference one or more fact tables (shipments, inventory_snapshots,
-// purchase_orders). Filters apply per fact table:
-//   - shipments:           destination_region, warehouse_id, dateStart/dateEnd (order_date)
-//   - inventory_snapshots: warehouse_id, dateStart/dateEnd (snapshot_date)
-//   - purchase_orders:     warehouse_id, dateStart/dateEnd (ordered_date)
+// purchase_orders, exceptions, returns). We wrap each referenced fact table in a CTE that
+// pre-filters it, then rewrite the table references to point to the CTE. This works correctly
+// even when the SQL already has WHERE clauses, JOINs, subqueries, or its own leading WITH
+// clause.
 //
-// We wrap each referenced fact table in a CTE that pre-filters it, then rewrite the table
-// references to point to the CTE. This works correctly even when the SQL already has WHERE
-// clauses, JOINs, subqueries, or its own leading WITH clause.
+// Per-table date columns:
+//   - shipments:           order_date
+//   - inventory_snapshots: snapshot_date
+//   - purchase_orders:     ordered_date
+//   - exceptions:          event_date
+//   - returns:             return_date
 //
-// Filters that require joins (customer_segment, sku_category, supplier_tier) are deferred
-// to chat-driven dynamic SQL — the filter bar exposes only the simple cases.
+// Dimension filters (customer_segment, sku_category, supplier_tier) are applied via
+// IN-subqueries against the dimension tables. They do not require additional joins in
+// the metric SQL itself.
+//
+// Exceptions and returns are also cross-filtered by shipment_id / po_id IN _shipments_f /
+// _po_f when a non-date dimension is active on those tables. This keeps numerator and
+// denominator scoped consistently for rate metrics (exception_rate, damage_rate,
+// return_rate, supplier_defect_rate).
 
 interface CteSpec { cteName: string; body: string; }
 
@@ -35,18 +44,27 @@ function injectCtes(sql: string, ctes: CteSpec[]): string {
   if (ctes.length === 0) return sql;
   const cteDecls = ctes.map(c => `${c.cteName} AS (${c.body})`).join(', ');
   if (/^\s*WITH\s/i.test(sql)) {
-    return sql.replace(/^(\s*WITH\s+)/i, `$1${cteDecls}, `);
+    // Use the function-replacement form: a string template would interpret `$1`/`$2`
+    // inside cteDecls (which are SQL parameter placeholders) as regex backreferences,
+    // corrupting the query.
+    return sql.replace(/^(\s*WITH\s+)/i, (_match, leadingWith) => `${leadingWith}${cteDecls}, `);
   }
   return `WITH ${cteDecls}\n${sql}`;
 }
 
-function applyFilters(sql: string, filters?: FilterState): { sql: string; params: unknown[] } {
+export function applyFilters(sql: string, filters?: FilterState): { sql: string; params: unknown[] } {
   if (!filters) return { sql, params: [] };
 
   const params: unknown[] = [];
   let p = 1;
   const ctes: CteSpec[] = [];
   let modified = sql;
+
+  // "Dimension" filters = anything other than the date range. We use these to decide
+  // whether to cross-filter exceptions/returns by shipment_id or po_id below.
+  const hasShipmentsDim = !!(filters.destination_region || filters.warehouse_id
+    || filters.customer_segment || filters.sku_category || filters.supplier_tier);
+  const hasPoDim = !!(filters.warehouse_id || filters.sku_category || filters.supplier_tier);
 
   // ----- shipments -----
   if (/\bshipments\b/i.test(modified)) {
@@ -55,6 +73,18 @@ function applyFilters(sql: string, filters?: FilterState): { sql: string; params
     if (filters.warehouse_id) { conds.push(`warehouse_id = $${p++}`); params.push(filters.warehouse_id); }
     if (filters.dateStart) { conds.push(`order_date >= $${p++}`); params.push(filters.dateStart); }
     if (filters.dateEnd) { conds.push(`order_date <= $${p++}`); params.push(filters.dateEnd); }
+    if (filters.customer_segment) {
+      conds.push(`customer_id IN (SELECT customer_id FROM customers WHERE segment = $${p++})`);
+      params.push(filters.customer_segment);
+    }
+    if (filters.sku_category) {
+      conds.push(`shipment_id IN (SELECT DISTINCT shipment_id FROM shipment_lines WHERE sku_id IN (SELECT sku_id FROM skus WHERE category = $${p++}))`);
+      params.push(filters.sku_category);
+    }
+    if (filters.supplier_tier) {
+      conds.push(`shipment_id IN (SELECT DISTINCT shipment_id FROM shipment_lines WHERE sku_id IN (SELECT sku_id FROM skus WHERE primary_supplier_id IN (SELECT supplier_id FROM suppliers WHERE tier = $${p++})))`);
+      params.push(filters.supplier_tier);
+    }
     if (conds.length > 0) {
       const cteName = '_shipments_f';
       ctes.push({ cteName, body: `SELECT * FROM shipments WHERE ${conds.join(' AND ')}` });
@@ -68,6 +98,14 @@ function applyFilters(sql: string, filters?: FilterState): { sql: string; params
     if (filters.warehouse_id) { conds.push(`warehouse_id = $${p++}`); params.push(filters.warehouse_id); }
     if (filters.dateStart) { conds.push(`snapshot_date >= $${p++}`); params.push(filters.dateStart); }
     if (filters.dateEnd) { conds.push(`snapshot_date <= $${p++}`); params.push(filters.dateEnd); }
+    if (filters.sku_category) {
+      conds.push(`sku_id IN (SELECT sku_id FROM skus WHERE category = $${p++})`);
+      params.push(filters.sku_category);
+    }
+    if (filters.supplier_tier) {
+      conds.push(`sku_id IN (SELECT sku_id FROM skus WHERE primary_supplier_id IN (SELECT supplier_id FROM suppliers WHERE tier = $${p++}))`);
+      params.push(filters.supplier_tier);
+    }
     if (conds.length > 0) {
       const cteName = '_inv_f';
       ctes.push({ cteName, body: `SELECT * FROM inventory_snapshots WHERE ${conds.join(' AND ')}` });
@@ -81,10 +119,69 @@ function applyFilters(sql: string, filters?: FilterState): { sql: string; params
     if (filters.warehouse_id) { conds.push(`warehouse_id = $${p++}`); params.push(filters.warehouse_id); }
     if (filters.dateStart) { conds.push(`ordered_date >= $${p++}`); params.push(filters.dateStart); }
     if (filters.dateEnd) { conds.push(`ordered_date <= $${p++}`); params.push(filters.dateEnd); }
+    if (filters.sku_category) {
+      conds.push(`sku_id IN (SELECT sku_id FROM skus WHERE category = $${p++})`);
+      params.push(filters.sku_category);
+    }
+    if (filters.supplier_tier) {
+      conds.push(`supplier_id IN (SELECT supplier_id FROM suppliers WHERE tier = $${p++})`);
+      params.push(filters.supplier_tier);
+    }
     if (conds.length > 0) {
       const cteName = '_po_f';
       ctes.push({ cteName, body: `SELECT * FROM purchase_orders WHERE ${conds.join(' AND ')}` });
       modified = modified.replace(/\bpurchase_orders\b/g, cteName);
+    }
+  }
+
+  // ----- exceptions -----
+  // Cross-filter via the already-built shipments/PO CTEs when a non-date dimension is set,
+  // so the numerator of exception_rate / damage_rate / supplier_defect_rate stays scoped
+  // to the same population as the denominator.
+  if (/\bexceptions\b/i.test(modified)) {
+    const conds: string[] = [];
+    if (filters.dateStart) { conds.push(`event_date >= $${p++}`); params.push(filters.dateStart); }
+    if (filters.dateEnd) { conds.push(`event_date <= $${p++}`); params.push(filters.dateEnd); }
+    const shipmentsCte = ctes.find(c => c.cteName === '_shipments_f');
+    const poCte = ctes.find(c => c.cteName === '_po_f');
+    const linkConds: string[] = [];
+    if (hasShipmentsDim && shipmentsCte) {
+      linkConds.push(`shipment_id IN (SELECT shipment_id FROM _shipments_f)`);
+    }
+    if (hasPoDim && poCte) {
+      linkConds.push(`po_id IN (SELECT po_id FROM _po_f)`);
+    }
+    if (linkConds.length > 0) {
+      conds.push(`(${linkConds.join(' OR ')})`);
+    }
+    if (conds.length > 0) {
+      const cteName = '_exceptions_f';
+      ctes.push({ cteName, body: `SELECT * FROM exceptions WHERE ${conds.join(' AND ')}` });
+      modified = modified.replace(/\bexceptions\b/g, cteName);
+    }
+  }
+
+  // ----- returns -----
+  if (/\breturns\b/i.test(modified)) {
+    const conds: string[] = [];
+    if (filters.dateStart) { conds.push(`return_date >= $${p++}`); params.push(filters.dateStart); }
+    if (filters.dateEnd) { conds.push(`return_date <= $${p++}`); params.push(filters.dateEnd); }
+    if (filters.customer_segment) {
+      conds.push(`customer_id IN (SELECT customer_id FROM customers WHERE segment = $${p++})`);
+      params.push(filters.customer_segment);
+    }
+    if (filters.sku_category) {
+      conds.push(`sku_id IN (SELECT sku_id FROM skus WHERE category = $${p++})`);
+      params.push(filters.sku_category);
+    }
+    const shipmentsCte = ctes.find(c => c.cteName === '_shipments_f');
+    if (hasShipmentsDim && shipmentsCte) {
+      conds.push(`shipment_id IN (SELECT shipment_id FROM _shipments_f)`);
+    }
+    if (conds.length > 0) {
+      const cteName = '_returns_f';
+      ctes.push({ cteName, body: `SELECT * FROM returns WHERE ${conds.join(' AND ')}` });
+      modified = modified.replace(/\breturns\b/g, cteName);
     }
   }
 
