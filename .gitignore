@@ -5,5 +5,8 @@ dist/
 .DS_Store
 /data/
 .claude/skills/
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+scripts/_inspect_out/
 .mcp.json
 ~$*
