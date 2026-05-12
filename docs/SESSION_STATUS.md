@@ -1,84 +1,74 @@
 # Session Status
 
 ## Current State
-**Phase**: 4 - Deploy & Polish
-**Status**: Phases 1-3 complete. Production build passing. Ready for deployment.
+**Project**: Meridian Industrial Supply demo (B2B industrial parts distributor)
+**Phase**: 4 — Widget library expansion + showcase dashboard (Phases 1–3 of supply-chain migration complete)
+**Last Commit**: `07e99bb` (pushed)
+**Demo Pitch**: democratization of dashboard authoring for non-technical business users; the artifact itself must read as enterprise-grade BI work.
 
-## Completed
-- [x] CLAUDE.md generated from template
-- [x] Session docs created
-- [x] Scaffold npm workspaces and install dependencies
-- [x] Configure TypeScript, Tailwind, Vite
-- [x] Define shared types (12 metrics, DashboardConfig, filters, breakdowns)
-- [x] Mock data service with random-walk trends, categorical breakdowns, filter multipliers
-- [x] In-memory config store
-- [x] Express routes: metrics, dashboard CRUD, refinement, chat, dashboard-chat
-- [x] Claude integration: onboarding chat, interpretation prompt, dashboard chat
-- [x] Refinement endpoints: interaction logging + rule-based suggestion generation
-- [x] Onboarding chat flow (multi-turn conversational)
-- [x] Interpretation review UI
-- [x] Personalized dashboard with Recharts (metric tiles, charts, breakdowns)
-- [x] Canonical (standard) view toggle
-- [x] Filter bar and categorical breakdowns
-- [x] Dashboard chat for live config mutation
-- [x] Refinement suggestion banner
-- [x] Test suite: 78 tests passing across 8 files
-- [x] Dockerfile (multi-stage build)
-- [x] Fix server TypeScript build error (chat.ts param typing)
+## Most Recent Completed Work — Session 2026-05-12
+Replaced retail sales dataset (single `sales_orders` table + 16 KPIs + 3 sales personas) with a full 11-table B2B supply chain data model under Meridian Industrial Supply: 200 suppliers, 12 warehouses, 18 carriers, 2,000 customers, 5,000 SKUs, ~55k shipments, ~25k PO lines, ~947k inventory snapshots. New 23-KPI library across Fulfillment / Inventory / Procurement / Logistics / Operations. Three new personas (CSCO, Warehouse Director, Procurement Lead). All Claude prompts, filter dimensions, client UI, and 78-test suite updated. Four narrative anomalies seeded into the data (APAC port congestion Nov 8–22, supplier SUP-0042 OTD decline last 120 days, EMEA logistics incident May 6, Cutting Tools category phase-out). See SESSION_HISTORY.md for full detail.
 
-## Session 2026-04-14 (pm-2): Studio → Catalog / Health / Dashboard plumbing
-- New `server/src/services/kpiStore.ts` holds published KPIs in memory (Map
-  keyed by kpiId, versioned on re-publish).
-- `POST /api/kpi-studio/:userId/publish` persists a candidate; `GET /api/kpis/published` returns the list.
-- `salesData.resolveDefs` merges `METRIC_DEFS` with kpiStore so
-  `generateSnapshot` queries published KPIs through the same pipeline. SQL
-  normalized on the fly: `production.sales.sales_orders` → `sales_orders`,
-  trailing `:year`/`:quarter` WHERE clauses stripped. Per-metric errors
-  now caught so one failing KPI doesn't 500 the whole snapshot.
-- `dashboardChat` handler injects a "Additional KPIs the user has authored
-  in the Studio" section into the context message each turn.
-- Client: `publishKpi` / `getPublishedKpis` helpers, green Publish button
-  in KpiStudio (enabled only after clean validation), Catalog + Health
-  poll `/api/kpis/published` every 4s and merge into the static registry.
-- Verified E2E on Railway with Playwright: create → validate → publish →
-  Catalog shows studio-authored tag → Health shows synthetic passing
-  assertion → dashboard chat "add X" renders the tile with live data.
+## Open Issues To Resolve Before Showcase Work
+
+**Bug — partial seed (top priority for next session):**
+After running migrations once on the Railway-connected Postgres, three tables came up empty when the rest of the seed completed correctly:
+- `exceptions`: 0 rows (expected ~15k)
+- `returns`: 0 rows (expected ~8k)
+- `kpi_definitions`: 0 rows (expected 23)
+- `kpi_versions`: 0 rows (expected ~25)
+
+Other tables seeded correctly (947k inventory snapshots and all the dimensions). Most likely either (a) seed was interrupted partway and the next boot skipped because skus had rows, or (b) a logic bug in `generateExceptions`/`generateReturns` or in `seedKpiLibrary`.
+
+**Diagnostic plan:**
+1. Run `RESET_DATA=true npm run dev` to force a clean wipe + reseed. Watch the console output for the per-step log lines (`seeded N exceptions`, `seeded N returns`, `Seeded 23 supply chain KPI definitions.`).
+2. If exceptions/returns still come up empty, inspect the generation logic in `server/src/services/supplyChain/seedFacts.ts`:
+   - `generateExceptions` iterates `shipments` and applies probability gating; if all probabilities are < `rng.next()`, nothing emits. Verify the rate math.
+   - `generateReturns` requires `ship.status === 'Delivered' && ship.deliveredDate`. Verify the shipments generator is producing Delivered records (it should — anything more than `carrier.slaDays + 2` days old gets a deliveredDate unless future-dated).
+3. If `kpi_definitions` stays empty, add per-KPI insert logging in `seedKpiLibrary` to find the failing row.
 
 ## Next Session Goals
-- Verify live on Railway that `order_date` is the actual column name; if not,
-  update `applyFilters`/`buildConditions` and `getAvailableFilters` in
-  `server/src/services/salesData.ts`.
-- Consider persisting global filters server-side when the user changes them
-  via the FilterBar (currently only chat-driven changes write to
-  `config.globalFilters`; manual FilterBar edits stay in local React state).
-- Consider chunk splitting to address 500kB bundle warning.
-- Update CLAUDE.md phase checklist to reflect completion.
 
-## Session 2026-04-14 (pm): Chat-generated date/time & global filters
-- `FilterState` gains `dateStart`/`dateEnd`; `DashboardConfig` gains
-  `globalFilters`. Chat `filter` action now writes to `globalFilters` and
-  applies to every tile, not just breakdown charts.
-- SQL helpers consolidated into `buildConditions`; date filters render as
-  `order_date >= $n` / `order_date <= $n`. `getAvailableFilters` exposes
-  dataset `minDate`/`maxDate` for UI clamping.
-- `/api/metrics` and `/api/metrics/categorical` accept full filter query
-  params including date range; client `getMetrics(ids, filters)` forwards
-  them.
-- `FilterBar` adds From/To date inputs; `Dashboard` seeds filters from
-  `config.globalFilters` and passes them into every metric fetch.
-- Chat prompt teaches the model to produce absolute ISO dates for phrases
-  like "Q1 2004" and to emit `{action:"filter", clear:true}` for clear
-  requests.
-- Assumption: column is `order_date`. Verify on Railway.
+1. **Resolve the partial-seed bug** (see above). Don't proceed to widget work until KPIs and exceptions/returns are seeded — KPIs especially block dashboard rendering.
 
-## Session 2026-04-14: Dashboard-chat fix & number formatting polish
-- Fixed dashboard-chat 404 after picking a pre-built persona. `handlePersonaPick`
-  now PUTs the persona config to the server under the current session userId
-  before entering the dashboard. Server `PUT /api/dashboard/:userId` upserts
-  instead of 404'ing when no existing config.
-- Client-presentable number formatting everywhere: new `client/src/lib/format.ts`
-  with `formatValue`/`formatAxis`/`formatDelta`. Applied to MetricTile, ChartTile,
-  GaugeTile, BreakdownChart, HeatMapChart. Dollars render as `$1.23M`, percent as
-  `87.3%`, counts with commas/K-M-B abbreviation.
-- Added data labels above BreakdownChart bars, fixed tooltip label/format.
-- Deployed + e2e verified on Railway (bundle `index-Bx5MRBxk.js`).
+2. **Phase 4 — Widget library expansion**. The simple bar/line/gauge widgets undercut the democratization pitch by making chat output look basic. Net-new widgets needed (per the plan in this session's chat):
+   - **Scorecard** (number + sparkline + comparison vs target/prior period + delta badge) — biggest reusable win, upgrades every KPI tile
+   - **Annotated time series** (line chart + event-pin overlay for anomalies)
+   - **Pivot table** with conditional formatting (color cells by value)
+   - **Funnel** (shipment lifecycle: Open → Picking → Packed → Shipped → Delivered, with drop-off %)
+   - **Waterfall** (OTIF bridge: prior → on-time impact + in-full impact + exception impact → current)
+   - **Cohort retention grid** (customers by acquisition month × monthly retention)
+   - **Top-N list with embedded data bars** (e.g., top 10 suppliers by OTD ranked, with bar)
+   - **Bullet chart** (actual vs target with qualitative bands)
+   - **Calendar heatmap** (daily shipment volume across 12 months)
+   - **Status grid** (compact tile-row with badge + spark + count per group)
+   - **Stacked area** (status mix over time)
+   - **Markdown text tile** (section headers / narrative context within a dashboard)
+   - Recommended starting subset for first PR: **Scorecard + Annotated time series + Pivot + Funnel** plus the sectioned layout + filter bar `compareTo` toggle. Lands the ceiling-raise without a multi-week build.
+
+3. **Phase 5 — Showcase dashboard**. Build the seeded "Q4 2025 Global Supply Chain Performance Review" CSCO view as a 16-tile sectioned dashboard. Sections: Headline (4 scorecards) / What Changed (annotated trend + waterfall) / Where (pivot + geo + status grid) / Customer & Pipeline (funnel + cohort + top-N) / Operations (bullet + calendar heatmap + stacked area). Wire it as the default landing for the CSCO persona.
+
+## Constraints to Honor
+
+From memory (`feedback_avoid_demo_theater.md`):
+- **No demo-theater UI** — don't add author attribution chips, animated chat-builds-tile transitions, live tile preview during chat composition, or tool-use trail badges. The artifact's quality should make the democratization case on its own, not signage on top of it.
+
+From memory (`feedback_chat_capabilities.md`):
+- **Dashboard chat must never refuse UI / element asks.** Never say "can't create UI" or "can only filter by X." Chat is the app's primary mutator.
+
+## Things to Verify on Railway/Local Boot
+
+1. Server log shows full migration sequence on boot (`=== Migrations: starting ===` through `=== Migrations: complete ===`).
+2. After boot, table row counts match expectations (see SESSION_HISTORY.md "Outstanding Issue" section).
+3. Persona switcher shows the three new personas (CSCO, Warehouse Director, Procurement Lead).
+4. Dashboard chat applies new filter dimensions correctly (e.g., "filter to EMEA" sets `destination_region=EMEA`).
+5. KPI Catalog shows the 23 supply chain KPIs with their ownership + version history + tags.
+
+## Skipped Untracked Files (intentionally not committed)
+
+Pre-existing untracked, left alone:
+- `.claude/` session state directory
+- `docs/Dashboard-Demo-Showcase-v2.docx`, `Prompt-Guided-Dashboard-Demo-Showcase.docx`, `demo-walkthrough.webm`, `screenshots/`
+- `scripts/`
+
+User to decide whether any of these belong in git.
