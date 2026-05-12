@@ -96,7 +96,12 @@ export default function App() {
                 />
               )}
               {dashboardPhase === 'dashboard' && config && (
-                <Dashboard config={config} userId={userId} onAuthorKpi={handleAuthorKpi} />
+                <Dashboard
+                  config={config}
+                  userId={userId}
+                  userName={user.displayName}
+                  onAuthorKpi={handleAuthorKpi}
+                />
               )}
             </>
           )}

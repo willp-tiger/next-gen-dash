@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import {
   buildBulletSnapshot,
   generateCalendar,
+  generateDrill,
   generateOtifWaterfall,
   generatePivot,
   generateShipmentFunnel,
@@ -146,6 +147,22 @@ router.get('/calendar', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('Calendar error:', err);
     res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to fetch calendar' });
+  }
+});
+
+router.get('/drill', async (req: Request, res: Response) => {
+  try {
+    const metricId = req.query.metricId as string | undefined;
+    if (!metricId) {
+      res.status(400).json({ error: 'metricId is required' });
+      return;
+    }
+    const limit = parseInt((req.query.limit as string | undefined) || '50', 10);
+    const snapshot = await generateDrill(metricId, parseFilters(req), Number.isFinite(limit) ? limit : 50);
+    res.json(snapshot);
+  } catch (err) {
+    console.error('Drill error:', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to fetch drill rows' });
   }
 });
 

@@ -50,11 +50,24 @@ export function MetricTile({ metric, value, userId, onClick }: MetricTileProps) 
       <div className={`metric-card-accent ${STATUS_COLORS[status].accent}`} />
 
       <div className="pl-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
             {metric.label}
           </span>
-          <HealthBadge value={value.current} thresholds={metric.thresholds} />
+          <div className="flex items-center gap-1.5">
+            {metric.notes && metric.notes.length > 0 && (
+              <span
+                title={`${metric.notes.length} pinned note${metric.notes.length === 1 ? '' : 's'}`}
+                className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700 ring-1 ring-amber-200"
+              >
+                <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M5.05 3.05a7 7 0 119.9 9.9L10 17.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" />
+                </svg>
+                {metric.notes.length}
+              </span>
+            )}
+            <HealthBadge value={value.current} thresholds={metric.thresholds} />
+          </div>
         </div>
 
         <div className="mt-3 flex items-baseline gap-3">

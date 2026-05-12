@@ -8,6 +8,7 @@ import type {
   FilterState,
   AuthResponse,
   AnnotationEvent,
+  DrillSnapshot,
   PivotSnapshot,
   PivotDimension,
   FunnelSnapshot,
@@ -201,6 +202,14 @@ export function getCalendar(source: 'shipments_per_day' | 'exceptions_per_day', 
   params.set('source', source);
   buildFilterParams(params, filters);
   return fetchJson<CalendarSnapshot>(`/widgets/calendar?${params.toString()}`);
+}
+
+export function getDrill(metricId: string, filters?: FilterState, limit?: number) {
+  const params = new URLSearchParams();
+  params.set('metricId', metricId);
+  if (limit !== undefined) params.set('limit', String(limit));
+  buildFilterParams(params, filters);
+  return fetchJson<DrillSnapshot>(`/widgets/drill?${params.toString()}`);
 }
 
 export function getFunnel(source: 'shipment_lifecycle', filters?: FilterState) {

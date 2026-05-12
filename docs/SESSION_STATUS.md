@@ -1,31 +1,34 @@
 # Session Status
 
 ## Current State
+
 **Project**: Meridian Industrial Supply demo (B2B industrial parts distributor)
-**Phase**: 4.5 widget batch shipped (8 of ~12 widget types live). Filter correctness verified end-to-end. Phase 5 showcase dashboard not yet built.
-**Last Commit**: `fe250be` (pushed) — feat(widgets): Phase 4.5 batch — waterfall, top-N, bullet, calendar heatmap
-**Demo Pitch**: democratization of dashboard authoring for non-technical business users; the artifact itself must read as enterprise-grade BI work.
+**Phase**: Manager + Director feature pass — first batch shipped (drill, notes, target); Phase 5 showcase still queued
+**Last Commit**: `10b39b6` (pushed) — current session's work is staged, not yet committed
+**Demo Pitch**: democratization of dashboard authoring for non-technical business users. The artifact must work as a Manager/Director surface for *acting on* what they see — drilling into detail, pinning context, comparing to commitments — not just looking at headline tiles.
 
-## Most Recent Completed Work — Session 2026-05-12 (evening)
+## Target Users — Scope of Record
 
-Two fronts:
+The demo targets **Manager and above only**. Analyst is explicitly out of scope.
 
-**Filter correctness (3 commits).** User flagged "filters still don't feel like they work" while reviewing the Phase 4 dashboard. Three distinct bugs:
-1. `applyFilters` never wrapped `exceptions`/`returns` tables, breaking 5 KPIs (`exception_rate`, `damage_rate`, `return_rate`, `supplier_defect_rate`, `avg_exception_mttr`) under any timeframe filter — fixed by adding both tables to the CTE pipeline + wiring `customer_segment`/`sku_category`/`supplier_tier` filter-bar selects (which were previously stubs).
-2. `inventory_turns` returned per-window ratios but the green threshold is annualized — fixed by multiplying by `(365 / span_days)`.
-3. **Real root cause of the user's perception**: rapid filter clicks fire correct requests but responses arrive out of order. The slower no-dates initial mount fetch returns last and overwrites the user's filtered snapshot with stale all-time data. Fixed with a closure-local `cancelled` flag in the fetch effect.
+- **Director** (e.g. CSCO) — needs board-ready scorecards, drill to evidence, commitment comparison, pinned context for ops reviews.
+- **Manager** (e.g. Warehouse Director, Procurement Lead) — needs personalized view, drill to driver rows, threshold awareness, notes for 1:1s.
+- **Analyst — dropped.** The role wanted SQL escape hatches, custom-formula editors, raw export, ad-hoc dimensions, statistical layer. All of those pulled the product toward "be a BI tool" and undermined the democratization wedge. Analysts will route to their own tools regardless.
 
-Plus a pre-existing `injectCtes` regex backreference bug uncovered by tests (`String.replace` was interpreting `$1` SQL placeholders as backreferences when source SQL had a leading `WITH`).
+**Out of scope for the demo** (would matter for a v1 product, not for the walkthrough): real ERP/WMS/TMS data connectors, SSO/RBAC, scheduled email/Slack delivery.
 
-**Phase 4.5 widget batch (1 commit).** Four new widgets, all visually verified in browser via Playwright + dashboard chat:
-- **WaterfallTile** — OTIF change-decomposition bridge.
-- **TopNTile** — ranked rows with embedded data bars; procurement metrics route to `purchase_orders` so per-supplier values reflect real OTD/lead-time.
-- **BulletTile** — actual + target tick over qualitative bands derived from thresholds.
-- **CalendarHeatmapTile** — 7×52 weekday × week intensity grid for shipments_per_day or exceptions_per_day.
+## Most Recent Completed Work — Session 2026-05-12 (late evening)
 
-Plus a React duplicate-key fix (`tileKey()`) for the case where multiple tiles share a metric id (scorecard + waterfall + bullet for OTIF).
+**Manager + Director feature batch #1** — drill, notes, target. Detailed history in `SESSION_HISTORY.md`.
 
-Tests: 110 passing total (84 prior + 26 new).
+- **`/api/widgets/drill`** — new endpoint returning fact-table rows behind any metric, scoped to active filters. 21 metric-to-drill specs encode *which* rows drive the number (OTIF → late/partial shipments, supplier_otd → late receipts, critical_sku_stockout → A-class zero-on-hand, etc.). Fallback to "recent shipments in scope" for unmapped metrics.
+- **Drill section in `MetricDetailDrawer`** — table of rows with active-filter chips, row-count summary, per-column rendering. Drawer now also opens for pivot/funnel/waterfall/calendar tiles (previously gated on snapshot value presence).
+- **Tile notes** — `MetricConfig.notes: TileNote[]` with author/body/createdAt. Pinned via the drawer, attributed to `UserProfile.displayName` (real user only — no synthetic personas). Amber note-pin badge on MetricTile and ScorecardTile when notes exist.
+- **Target + vs-commitment delta** — Scorecard renders a separate "vs target" line when `MetricConfig.target` is explicitly set, distinct from "vs prior period." Sparkline shows a dashed target reference line. Drawer label switches between "Target" (explicit commitment) and "Healthy threshold" (derived from green.max).
+
+Type additions: `TileNote`, `DrillSnapshot`, `DrillColumn`, `DrillSourceTable`, `MetricConfig.notes`. App.tsx passes `displayName` through to Dashboard for note authorship.
+
+Tests: 110 passing (unchanged). Server `tsc` and client `tsc -b && vite build` clean. Live API probes confirm drill works for shipment-, PO-, inventory-, and exception-backed metrics with filter scoping.
 
 ## Widget library — current state
 
@@ -36,7 +39,7 @@ Tests: 110 passing total (84 prior + 26 new).
 | gauge | ✓ | original |
 | breakdown | ✓ | original |
 | heatmap | ✓ | original |
-| **scorecard** | ✓ | Phase 4 |
+| **scorecard** | ✓ | Phase 4 — vs-target delta + sparkline reference line added this session |
 | **annotated_line** | ✓ | Phase 4 |
 | **pivot** | ✓ | Phase 4 |
 | **funnel** | ✓ | Phase 4 |
@@ -49,41 +52,47 @@ Tests: 110 passing total (84 prior + 26 new).
 | status grid | not started | Phase 4.5 second half |
 | stacked area | not started | Phase 4.5 second half |
 
-## Open Issues / Pre-existing Performance Problem
+## Open Issues / Verification Needed
 
-- **`perfect_order_rate` is ~7 seconds on Railway.** Pre-existing, not caused by this session's changes, but very visible: the dashboard hangs in skeleton state for ~7s on initial load because all CSCO persona metrics fetch in parallel and the slowest one gates the snapshot. The query has three EXISTS subqueries (shipment_lines, exceptions, returns) per delivered shipment. Should be tackled before the showcase: either add a covering index, materialize a `perfect_order_flag` column on shipments at seed time, or cache the value with a short TTL.
+- **Browser walkthrough of the new drawer is outstanding.** Drill rows, filter chips, note add/remove, scorecard target line / sparkline reference line have not been visually verified. Live API probes confirmed the backend works (28,820 OTIF-miss shipments, 21,331 late POs, 27,657 critical-SKU positions, 1,223 APAC exceptions under filter), but the drawer UI itself needs a click-through.
+- **`perfect_order_rate` is ~7 seconds on Railway** (pre-existing, not caused by this session). Three EXISTS subqueries per delivered shipment. Should be tackled before Phase 5: materialize `perfect_order_flag` BOOLEAN on shipments at seed time + index it.
 
 ## Next Session Goals
 
 Recommended order:
 
-1. **Fix `perfect_order_rate` slowness.** Highest UX leverage — every persona that includes it sees a 7s load. Easiest fix: materialize `perfect_order_flag` BOOLEAN on `shipments` at seed time and add an index. Rewrite the KPI's execSql to a simple `AVG(perfect_order_flag::int) * 100`.
+1. **Visual verification** of drill drawer + notes + target line against seeded data. Boot `npm run dev`, click into a red OTIF scorecard, confirm late shipments listed with days-late sort, pin a note, refresh and confirm persistence, toggle filters and confirm chip + scope updates.
 
-2. **Phase 5 — Showcase dashboard** as the default for the CSCO persona. Layout from prior planning: Headline (4 scorecards) / What Changed (annotated trend + waterfall) / Where (pivot + status grid) / Customer & Pipeline (funnel + top-N + cohort) / Operations (bullet + calendar heatmap + stacked area). The "cohort", "status grid", and "stacked area" sections need their widgets built first OR can be substituted with what already exists.
+2. **Manager + Director feature batch #2.** Pick from the deferred list:
+   - **Threshold alert setup UI** — let the user configure "alert me when OTIF < 92" on a tile. Doesn't need to actually fire; the visible setup sells the story. Small lift.
+   - **Team scoreboard widget** — Manager-specific. New widget type: sites/regions as rows with health badge + sparkline + owner. Larger lift (new widget shape + backend).
+   - **Export to PNG/PDF** — closes the chat → dashboard → board pack loop. Could be a single-screen capture, doesn't need a full report builder.
+   - **Comments + ownership extension** — add `assignedTo` to TileNote so a Director can hand a tile off to a Manager persona in the demo.
 
-3. **Phase 4.5 second half** — cohort retention grid, status grid, stacked area, markdown text tile (proper renderer). 4 widgets remaining. Either ship before Phase 5, or scope Phase 5 to use only the current 8 widgets and slot the remaining 4 into a Phase 6.
+3. **Fix `perfect_order_rate` slowness** if it's blocking visual verification. Highest UX leverage — every persona that includes it sees a 7s load.
+
+4. **Phase 5 — Showcase dashboard** as the default for the CSCO persona. Now benefits from drill + notes + target work — the showcase is the natural place to demo all three. Layout from prior planning: Headline (4 scorecards) / What Changed (annotated trend + waterfall) / Where (pivot + status grid) / Customer & Pipeline (funnel + top-N + cohort) / Operations (bullet + calendar heatmap + stacked area).
 
 ## Things to Verify on Railway/Local Boot
 
-1. `applyKpiFixups` log line appears: `Applied execSql fixup for KPI: inventory_turns` (or it's already up to date and skipped silently).
-2. `/api/widgets/waterfall?source=otif_bridge` returns 5-stage bridge.
-3. `/api/widgets/top-n?metricId=supplier_otd&dimension=supplier&n=10` returns suppliers with values in 40-75% range (NOT shipment value).
-4. `/api/widgets/bullet?metricId=otif_rate` returns bands ordered critical → warning → healthy.
-5. `/api/widgets/calendar?source=shipments_per_day` returns 365 cells.
-6. Filter bar's "Compare to" toggle (None / Prior period / Prior year) flows through to scorecards.
-7. Rapid clicks across 7d/30d/YTD presets settle on the correct values within ~10s (race condition fix).
+1. `/api/widgets/drill?metricId=otif_rate&limit=10` returns late/partial shipments sorted by days-late.
+2. `/api/widgets/drill?metricId=critical_sku_stockout_rate&limit=10` returns A-class zero-on-hand positions (regression test for the count-query JOIN fix made this session).
+3. Drawer opens for a pivot or funnel tile (no snapshot value) and the drill rows render.
+4. Adding a note via the drawer persists across page reload.
+5. A scorecard with `metric.target` set shows the "vs target" delta and a dashed line in the sparkline.
+6. Pre-existing checks: `applyKpiFixups` log line appears; `/api/widgets/waterfall` returns 5-stage bridge; `/api/widgets/top-n?metricId=supplier_otd&dimension=supplier&n=10` returns supplier rates in 40-75% range; rapid filter clicks settle on correct values within ~10s.
 
 ## Constraints to Honor
 
 From memory (`feedback_avoid_demo_theater.md`):
-- **No demo-theater UI** — don't add author attribution chips, animated chat-builds-tile transitions, live tile preview during chat composition, or tool-use trail badges.
+- No author attribution chips for *fake* identities, animated chat-builds-tile transitions, live tile preview during chat composition, or tool-use trail badges. **Real user notes attributed to the real logged-in user are fine** and don't violate this rule.
 
 From memory (`feedback_chat_capabilities.md`):
-- **Dashboard chat must never refuse UI / element asks.**
+- Dashboard chat must never refuse UI / element asks. Chat is the app's primary mutator.
 
 ## Skipped Untracked Files (intentionally not committed)
 
 Pre-existing untracked, left alone:
 - `.claude/`
 - `docs/Dashboard-Demo-Showcase-v2.docx`, `Prompt-Guided-Dashboard-Demo-Showcase.docx`, `demo-walkthrough.webm`, `screenshots/`
-- `scripts/` — though this session added 3 new helper scripts here (`verify-filters.py`, `verify-batch2-widgets.py`, `trace-skeletons.py`); the directory is gitignored per the prior session's note.
+- `scripts/` — gitignored per prior session's note.

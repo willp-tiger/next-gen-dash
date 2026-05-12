@@ -91,6 +91,17 @@ export interface MetricConfig {
   target?: number;
   /** Markdown widget body (only used when chartType === 'markdown'). */
   markdown?: string;
+  /** User-authored notes pinned to this tile. */
+  notes?: TileNote[];
+}
+
+export interface TileNote {
+  id: string;
+  /** Display name of the author at the time of writing. */
+  author: string;
+  /** Plain text body. */
+  body: string;
+  createdAt: string;
 }
 
 export interface ThresholdConfig {
@@ -321,6 +332,41 @@ export interface CalendarSnapshot {
   cells: CalendarCell[];
   min: number;
   max: number;
+}
+
+// === Drill-to-detail ===
+
+export type DrillSourceTable =
+  | 'shipments'
+  | 'purchase_orders'
+  | 'inventory_snapshots'
+  | 'exceptions'
+  | 'returns';
+
+export interface DrillColumn {
+  /** Column key in the row object. */
+  key: string;
+  /** Display label. */
+  label: string;
+  /** How to format / align the column. */
+  kind: 'text' | 'number' | 'currency' | 'percent' | 'date' | 'badge';
+  /** Hint to highlight the column the metric is most about (e.g., days_late for OTIF). */
+  primary?: boolean;
+}
+
+export interface DrillSnapshot {
+  metricId: string;
+  /** Which fact table the rows came from. */
+  source: DrillSourceTable;
+  /** Plain-English description of what the rows represent (e.g. "Late or partial shipments"). */
+  rowDescription: string;
+  /** Total matching rows in the seed (before limit). */
+  totalRows: number;
+  /** Limit applied to rows[]. */
+  limit: number;
+  columns: DrillColumn[];
+  /** Each row is a flat dict keyed by column.key. */
+  rows: Record<string, string | number | null>[];
 }
 
 // === API Request/Response Types ===

@@ -1,5 +1,73 @@
 # Session History
 
+## Session 2026-05-12 (late evening): Role-fit scope decision + Manager/Director feature batch
+
+**Goal:** Evaluate the artifact against three enterprise personas (Director, Analyst, Manager), narrow the demo's target audience, and build the highest-impact features for the remaining personas.
+
+**Scope decision:**
+- **Analyst removed from target users.** The role wanted SQL escape hatches, custom-formula editors, CSV/raw-row export, ad-hoc dimensions, and a forecast/stats layer — all of which pulled the product toward "be a BI tool" and away from the democratization wedge. Dropping Analyst lets the chat-driven, prompt-guided authoring concept stand without compromise.
+- **Manager + Director are the canonical users.** Their needs are *to act on* what they see (drill, comment, set targets) rather than to author new analysis. This shifts the roadmap from "expose more data shaping" to "close the loop from observation to decision."
+- **Real data connectors / SSO / RBAC explicitly out of scope** because this is a demo, not a v1 product. Every Manager/Director feature must be implementable against the seeded Meridian data and earn its place by making the walkthrough land.
+
+**Trimmed feature requirements (from a 7-item list down to 3 for this session):**
+1. Drill-to-detail — biggest credibility multiplier; without it the dashboard reads as a poster.
+2. Tile comments / pinned notes — collaboration sells cheaply.
+3. Target line + vs-commitment delta on scorecards — Director's "vs commitment" framing, distinct from prior-period.
+
+(Remaining deferred: export PPT/PDF, threshold alert setup UI, team scoreboard widget, mobile read pass.)
+
+**Completed Tasks:**
+
+### 1. Drill-to-detail
+
+- **New `GET /api/widgets/drill` endpoint** returning the underlying fact rows behind any metric, scoped to the active filter state. Per-metric row selection is opinionated — OTIF surfaces late/partial shipments sorted by days-late; supplier_otd surfaces late receipts sorted by days-late; critical_sku_stockout_rate surfaces A-class zero-on-hand inventory positions; etc.
+- **21 metric-to-drill specs** in `DRILL_SPECS` mapping each KPI to a source table (shipments / purchase_orders / inventory_snapshots / exceptions / returns), a "what these rows represent" description, an ordered column set, and an extra-WHERE clause selecting *driver* rows rather than dumping the full fact table. Unmapped metrics fall through to a "recent shipments in scope" default.
+- **Three drill-SQL builders** (`shipmentDrillSql`, `poDrillSql`, `inventoryDrillSql`) plus exception/return helpers, all reusing the FilterState dimension/date conditions. Count query mirrors the row query's JOINs so extra-WHERE clauses referencing joined aliases (e.g. `sk.abc_class` for critical_sku) don't error.
+- **MetricDetailDrawer rewrite** to render the rows beneath the existing trend/threshold sections. Added active-filter chips at the top, a row-count summary ("3 of 28,820 shipments"), and per-column rendering (badges, currency, right-aligned numerics). Drawer now opens for selected tiles even when there's no snapshot value — i.e., self-fetching widgets (pivot, funnel, waterfall, calendar) can drill too.
+
+### 2. Tile comments / pinned notes
+
+- **`TileNote[]` on `MetricConfig`** with `id`, `author`, `body`, `createdAt`. Notes bucket by metric id (not tile instance), so a Director's note about OTIF appears wherever OTIF is rendered.
+- **Notes section in MetricDetailDrawer** — list of pinned notes with author + timestamp + hover-to-delete, plus a textarea with Cmd/Ctrl+Enter shortcut for pinning. Persisted through the existing `updateDashboardConfig` path.
+- **Real-author attribution.** Notes are attributed to `UserProfile.displayName` of the logged-in user (passed App.tsx → Dashboard → drawer). This respects the `feedback_avoid_demo_theater.md` rule against synthetic author chips — we never fabricate other personas as authors; only the actual user is named.
+- **Note-pin badge on tiles** — amber rounded badge with count, rendered next to the health badge on `MetricTile` and `ScorecardTile`. Subtle by design.
+
+### 3. Target line + vs-commitment delta
+
+- **Scorecard "vs target" line** alongside the existing "vs prior period" delta. Only renders when `MetricConfig.target` is explicitly set (not when it's derived from `green.max`) — this is the Director-facing commitment comparison, kept separate from the green-threshold display so the two don't get conflated.
+- **Sparkline reference line** at the target value, with a hidden `YAxis` extended to include the target so the line is always visible even when the trend never crosses it.
+- **MetricDetailDrawer label switch.** When `metric.target` is set, the reference line and badge label read "Target"; otherwise they read "Healthy threshold." Same data structure, semantically distinct presentation.
+
+**Technical Decisions:**
+
+- **Drill row selection is opinionated, not generic.** A `SELECT * FROM shipments LIMIT 50` drill wastes the click — it returns rows that have nothing in particular to do with why the metric is red. Each spec encodes "what drives this number" (late + partial for OTIF, zero-on-hand for stockout) so the drill answers the natural follow-up question. Trade-off: it's per-metric work to add new ones, but the default fallback prevents a hard error for unmapped metrics.
+- **Notes bucket by metric id, not tile id.** A user with two OTIF widgets (scorecard + waterfall) shares notes between them. The mental model is "I'm noting something about OTIF," not "this tile instance." Sharing across tile instances reduces duplication and matches how a Director would actually think.
+- **Target distinct from `thresholds.green.max`.** Green threshold defines health bands ("acceptable performance"). Target is the commitment ("what we promised the board"). They are often the same number, but they're conceptually different — a CSCO may run a 92% OTIF green threshold but commit to 95% to the board. Surfacing them separately on scorecards lets the same dashboard serve both Director (vs commitment) and Manager (vs healthy) framings.
+- **Drawer accepts optional `value`.** Previously the drawer only opened for snapshot-backed tiles, so clicks from pivot/funnel/waterfall/calendar opened nothing. Made `value` optional and gated trend/threshold/stat sections on its presence — drill rows and notes work for any selected tile.
+
+**Issues Resolved:**
+
+- **First version of inventory drill crashed with "missing FROM-clause entry for table sk".** The count query didn't include the `JOIN skus sk` that the row query did, so `critical_sku_stockout_rate`'s `sk.abc_class = 'A'` predicate failed when counting. Fixed by mirroring the row-query joins in the count query for all three drill builders (shipments + customers/warehouses/carriers, POs + suppliers/warehouses, inventory + warehouses/skus).
+
+**Files Created:** none.
+
+**Files Modified:**
+- `shared/types.ts` — `TileNote`, `DrillSnapshot`, `DrillColumn`, `DrillSourceTable`; `MetricConfig.notes` field.
+- `server/src/services/widgets.ts` — `generateDrill` + per-metric `DRILL_SPECS` + three drill-SQL builders + filter helpers + count-query JOIN mirrors.
+- `server/src/routes/widgets.ts` — `GET /drill` route.
+- `client/src/api/client.ts` — `getDrill` API helper.
+- `client/src/components/dashboard/MetricDetailDrawer.tsx` — full rewrite with drill, notes, filter chips, optional value support.
+- `client/src/components/dashboard/ScorecardTile.tsx` — vs-target delta, sparkline target reference line, note badge.
+- `client/src/components/dashboard/MetricTile.tsx` — note badge.
+- `client/src/components/dashboard/Dashboard.tsx` — `userName` prop, `addNote`/`removeNote` handlers, drawer wiring (filters/author/handlers).
+- `client/src/App.tsx` — pass `user.displayName` to Dashboard as `userName`.
+
+**Tests:** 110 passing (unchanged — the new endpoint is exercised via live API probes, no unit tests added for the drill SQL since it's largely seeded-data shape work).
+
+**Open verification:** Browser walkthrough of the new drawer is the natural next step. Live API probes confirmed `otif_rate`, `supplier_otd`, `critical_sku_stockout_rate`, and `exception_rate` drills return the expected source tables and row counts (28,820 OTIF-miss shipments, 21,331 late POs, 27,657 critical-SKU positions, 1,223 APAC exceptions under filter). But the drawer UI itself — table layout, filter chips, note input UX, target line visibility — has not been visually verified.
+
+---
+
 ## Session 2026-05-12 (evening): Filter correctness pass + Phase 4.5 widget batch
 
 **Goal:** Validate Phase 4 widgets in the browser, fix filter behavior the user flagged ("filters still don't feel like they work"), then ship the next 4 widget types from the Phase 4.5 list.

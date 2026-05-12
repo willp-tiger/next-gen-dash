@@ -6,6 +6,9 @@ import type {
   AnnotationEvent,
   BulletSnapshot,
   CalendarSnapshot,
+  DrillColumn,
+  DrillSnapshot,
+  DrillSourceTable,
   FilterState,
   FunnelSnapshot,
   PivotDimension,
@@ -657,4 +660,611 @@ export async function generateCalendar(
   const max = values.length > 0 ? Math.max(...values) : 0;
 
   return { source, dateStart, dateEnd, cells, min, max };
+}
+
+// === Drill-to-detail ===
+//
+// Returns the underlying fact rows behind a metric, scoped to the active filters. The
+// row selection is opinionated per metric — for OTIF we surface late/partial shipments,
+// for stockout we surface zero-on-hand A-class positions, etc. — so the drill answers
+// "which transactions are *driving* this number" rather than dumping the full fact table.
+
+interface DrillSpec {
+  source: DrillSourceTable;
+  /** What the rows represent in plain English. */
+  rowDescription: string;
+  /** Column definitions for the response. */
+  columns: DrillColumn[];
+  /** Build the row-fetch SQL. Must alias columns to match `columns[].key`. */
+  buildSql: (filters?: FilterState) => { sql: string; countSql: string; params: unknown[] };
+}
+
+/** Inclusive WHERE for the shipments table using the standard FilterState. */
+function shipmentFilterWhere(filters: FilterState | undefined, alias = 's'): { sql: string; params: unknown[]; nextParam: number } {
+  const conds: string[] = [];
+  const params: unknown[] = [];
+  let p = 1;
+  if (filters?.destination_region) { conds.push(`${alias}.destination_region = $${p++}`); params.push(filters.destination_region); }
+  if (filters?.warehouse_id) { conds.push(`${alias}.warehouse_id = $${p++}`); params.push(filters.warehouse_id); }
+  if (filters?.dateStart) { conds.push(`${alias}.order_date >= $${p++}`); params.push(filters.dateStart); }
+  if (filters?.dateEnd) { conds.push(`${alias}.order_date <= $${p++}`); params.push(filters.dateEnd); }
+  if (filters?.customer_segment) {
+    conds.push(`${alias}.customer_id IN (SELECT customer_id FROM customers WHERE segment = $${p++})`);
+    params.push(filters.customer_segment);
+  }
+  if (filters?.sku_category) {
+    conds.push(`${alias}.shipment_id IN (SELECT DISTINCT shipment_id FROM shipment_lines WHERE sku_id IN (SELECT sku_id FROM skus WHERE category = $${p++}))`);
+    params.push(filters.sku_category);
+  }
+  if (filters?.supplier_tier) {
+    conds.push(`${alias}.shipment_id IN (SELECT DISTINCT shipment_id FROM shipment_lines WHERE sku_id IN (SELECT sku_id FROM skus WHERE primary_supplier_id IN (SELECT supplier_id FROM suppliers WHERE tier = $${p++})))`);
+    params.push(filters.supplier_tier);
+  }
+  return { sql: conds.length ? `WHERE ${conds.join(' AND ')}` : '', params, nextParam: p };
+}
+
+function poFilterWhere(filters: FilterState | undefined): { sql: string; params: unknown[]; nextParam: number } {
+  const conds: string[] = [];
+  const params: unknown[] = [];
+  let p = 1;
+  if (filters?.warehouse_id) { conds.push(`po.warehouse_id = $${p++}`); params.push(filters.warehouse_id); }
+  if (filters?.dateStart) { conds.push(`po.ordered_date >= $${p++}`); params.push(filters.dateStart); }
+  if (filters?.dateEnd) { conds.push(`po.ordered_date <= $${p++}`); params.push(filters.dateEnd); }
+  if (filters?.supplier_tier) {
+    conds.push(`po.supplier_id IN (SELECT supplier_id FROM suppliers WHERE tier = $${p++})`);
+    params.push(filters.supplier_tier);
+  }
+  if (filters?.sku_category) {
+    conds.push(`po.sku_id IN (SELECT sku_id FROM skus WHERE category = $${p++})`);
+    params.push(filters.sku_category);
+  }
+  return { sql: conds.length ? `WHERE ${conds.join(' AND ')}` : '', params, nextParam: p };
+}
+
+function inventoryFilterWhere(filters: FilterState | undefined): { sql: string; params: unknown[]; nextParam: number } {
+  const conds: string[] = [];
+  const params: unknown[] = [];
+  let p = 1;
+  if (filters?.warehouse_id) { conds.push(`i.warehouse_id = $${p++}`); params.push(filters.warehouse_id); }
+  if (filters?.dateStart) { conds.push(`i.snapshot_date >= $${p++}`); params.push(filters.dateStart); }
+  if (filters?.dateEnd) { conds.push(`i.snapshot_date <= $${p++}`); params.push(filters.dateEnd); }
+  if (filters?.sku_category) {
+    conds.push(`i.sku_id IN (SELECT sku_id FROM skus WHERE category = $${p++})`);
+    params.push(filters.sku_category);
+  }
+  if (filters?.supplier_tier) {
+    conds.push(`i.sku_id IN (SELECT sku_id FROM skus WHERE primary_supplier_id IN (SELECT supplier_id FROM suppliers WHERE tier = $${p++}))`);
+    params.push(filters.supplier_tier);
+  }
+  return { sql: conds.length ? `WHERE ${conds.join(' AND ')}` : '', params, nextParam: p };
+}
+
+const SHIPMENT_COLUMNS: DrillColumn[] = [
+  { key: 'shipment_id', label: 'Shipment', kind: 'text' },
+  { key: 'order_date', label: 'Ordered', kind: 'date' },
+  { key: 'promised_date', label: 'Promised', kind: 'date' },
+  { key: 'delivered_date', label: 'Delivered', kind: 'date' },
+  { key: 'days_late', label: 'Days late', kind: 'number', primary: true },
+  { key: 'customer_name', label: 'Customer', kind: 'text' },
+  { key: 'destination_region', label: 'Region', kind: 'badge' },
+  { key: 'warehouse_name', label: 'Warehouse', kind: 'text' },
+  { key: 'carrier_name', label: 'Carrier', kind: 'text' },
+  { key: 'total_value', label: 'Value', kind: 'currency' },
+  { key: 'status', label: 'Status', kind: 'badge' },
+];
+
+const PO_COLUMNS: DrillColumn[] = [
+  { key: 'po_id', label: 'PO #', kind: 'text' },
+  { key: 'line_number', label: 'Line', kind: 'number' },
+  { key: 'supplier_name', label: 'Supplier', kind: 'text' },
+  { key: 'sku_id', label: 'SKU', kind: 'text' },
+  { key: 'ordered_date', label: 'Ordered', kind: 'date' },
+  { key: 'promised_date', label: 'Promised', kind: 'date' },
+  { key: 'received_date', label: 'Received', kind: 'date' },
+  { key: 'days_late', label: 'Days late', kind: 'number', primary: true },
+  { key: 'qty_ordered', label: 'Qty ordered', kind: 'number' },
+  { key: 'qty_received', label: 'Qty received', kind: 'number' },
+  { key: 'warehouse_name', label: 'Warehouse', kind: 'text' },
+  { key: 'status', label: 'Status', kind: 'badge' },
+];
+
+const INVENTORY_COLUMNS: DrillColumn[] = [
+  { key: 'snapshot_date', label: 'Date', kind: 'date' },
+  { key: 'warehouse_name', label: 'Warehouse', kind: 'text' },
+  { key: 'sku_id', label: 'SKU', kind: 'text' },
+  { key: 'sku_name', label: 'Name', kind: 'text' },
+  { key: 'category', label: 'Category', kind: 'badge' },
+  { key: 'abc_class', label: 'ABC', kind: 'badge' },
+  { key: 'on_hand_qty', label: 'On hand', kind: 'number', primary: true },
+  { key: 'days_of_supply', label: 'Days of supply', kind: 'number' },
+  { key: 'on_order_qty', label: 'On order', kind: 'number' },
+];
+
+const EXCEPTION_COLUMNS: DrillColumn[] = [
+  { key: 'exception_id', label: 'Exception #', kind: 'text' },
+  { key: 'event_date', label: 'Opened', kind: 'date' },
+  { key: 'shipment_id', label: 'Shipment', kind: 'text' },
+  { key: 'reason_code', label: 'Reason', kind: 'badge' },
+  { key: 'severity', label: 'Severity', kind: 'badge', primary: true },
+  { key: 'resolved_date', label: 'Resolved', kind: 'date' },
+  { key: 'mttr_days', label: 'MTTR (days)', kind: 'number' },
+];
+
+const RETURN_COLUMNS: DrillColumn[] = [
+  { key: 'return_id', label: 'Return #', kind: 'text' },
+  { key: 'return_date', label: 'Date', kind: 'date' },
+  { key: 'shipment_id', label: 'Shipment', kind: 'text' },
+  { key: 'sku_id', label: 'SKU', kind: 'text' },
+  { key: 'reason_code', label: 'Reason', kind: 'badge', primary: true },
+  { key: 'qty_returned', label: 'Qty', kind: 'number' },
+  { key: 'refund_amount', label: 'Refund', kind: 'currency' },
+  { key: 'condition', label: 'Condition', kind: 'badge' },
+];
+
+/** Wrap a shipments-table drill with the standard SELECT + joins, applying `extraWhere`. */
+function shipmentDrillSql(extraWhere: string, filters?: FilterState, orderBy = 's.order_date DESC') {
+  const where = shipmentFilterWhere(filters);
+  const fullWhere = [where.sql.replace(/^WHERE /, ''), extraWhere].filter(Boolean).join(' AND ');
+  const whereSql = fullWhere ? `WHERE ${fullWhere}` : '';
+  const sql = `
+    SELECT
+      s.shipment_id,
+      s.order_date,
+      s.promised_date,
+      s.delivered_date,
+      CASE
+        WHEN s.delivered_date IS NULL THEN NULL
+        ELSE GREATEST(0, (s.delivered_date - s.promised_date))
+      END AS days_late,
+      c.name AS customer_name,
+      s.destination_region,
+      w.name AS warehouse_name,
+      ca.name AS carrier_name,
+      s.total_value,
+      s.status
+    FROM shipments s
+    JOIN customers c ON c.customer_id = s.customer_id
+    JOIN warehouses w ON w.warehouse_id = s.warehouse_id
+    JOIN carriers ca ON ca.carrier_id = s.carrier_id
+    ${whereSql}
+    ORDER BY ${orderBy}
+    LIMIT $${where.nextParam}
+  `;
+  const countSql = `
+    SELECT COUNT(*)::int AS cnt
+    FROM shipments s
+    JOIN customers c ON c.customer_id = s.customer_id
+    JOIN warehouses w ON w.warehouse_id = s.warehouse_id
+    JOIN carriers ca ON ca.carrier_id = s.carrier_id
+    ${whereSql}
+  `;
+  return { sql, countSql, params: where.params };
+}
+
+function poDrillSql(extraWhere: string, filters?: FilterState, orderBy = 'po.ordered_date DESC') {
+  const where = poFilterWhere(filters);
+  const fullWhere = [where.sql.replace(/^WHERE /, ''), extraWhere].filter(Boolean).join(' AND ');
+  const whereSql = fullWhere ? `WHERE ${fullWhere}` : '';
+  const sql = `
+    SELECT
+      po.po_id,
+      po.line_number,
+      sup.name AS supplier_name,
+      po.sku_id,
+      po.ordered_date,
+      po.promised_date,
+      po.received_date,
+      CASE
+        WHEN po.received_date IS NULL THEN NULL
+        ELSE GREATEST(0, (po.received_date - po.promised_date))
+      END AS days_late,
+      po.qty_ordered,
+      po.qty_received,
+      w.name AS warehouse_name,
+      po.status
+    FROM purchase_orders po
+    JOIN suppliers sup ON sup.supplier_id = po.supplier_id
+    JOIN warehouses w ON w.warehouse_id = po.warehouse_id
+    ${whereSql}
+    ORDER BY ${orderBy}
+    LIMIT $${where.nextParam}
+  `;
+  const countSql = `
+    SELECT COUNT(*)::int AS cnt
+    FROM purchase_orders po
+    JOIN suppliers sup ON sup.supplier_id = po.supplier_id
+    JOIN warehouses w ON w.warehouse_id = po.warehouse_id
+    ${whereSql}
+  `;
+  return { sql, countSql, params: where.params };
+}
+
+function inventoryDrillSql(extraWhere: string, filters?: FilterState, orderBy = 'i.snapshot_date DESC, i.on_hand_qty ASC') {
+  const where = inventoryFilterWhere(filters);
+  const fullWhere = [where.sql.replace(/^WHERE /, ''), extraWhere].filter(Boolean).join(' AND ');
+  const whereSql = fullWhere ? `WHERE ${fullWhere}` : '';
+  const sql = `
+    SELECT
+      i.snapshot_date,
+      w.name AS warehouse_name,
+      i.sku_id,
+      sk.name AS sku_name,
+      sk.category,
+      sk.abc_class,
+      i.on_hand_qty,
+      i.days_of_supply,
+      i.on_order_qty
+    FROM inventory_snapshots i
+    JOIN warehouses w ON w.warehouse_id = i.warehouse_id
+    JOIN skus sk ON sk.sku_id = i.sku_id
+    ${whereSql}
+    ORDER BY ${orderBy}
+    LIMIT $${where.nextParam}
+  `;
+  const countSql = `
+    SELECT COUNT(*)::int AS cnt
+    FROM inventory_snapshots i
+    JOIN warehouses w ON w.warehouse_id = i.warehouse_id
+    JOIN skus sk ON sk.sku_id = i.sku_id
+    ${whereSql}
+  `;
+  return { sql, countSql, params: where.params };
+}
+
+function exceptionDrillSql(filters?: FilterState) {
+  // Exceptions filter through their shipment when shipment filters are active.
+  const ship = shipmentFilterWhere(filters);
+  const params = [...ship.params];
+  let p = ship.nextParam;
+  const conds: string[] = [];
+  if (filters?.dateStart) { conds.push(`e.event_date >= $${p++}`); params.push(filters.dateStart); }
+  if (filters?.dateEnd) { conds.push(`e.event_date <= $${p++}`); params.push(filters.dateEnd); }
+  const shipScopeSql = ship.sql.replace(/^WHERE /, '');
+  const shipScope = shipScopeSql
+    ? `e.shipment_id IN (SELECT s.shipment_id FROM shipments s WHERE ${shipScopeSql})`
+    : '';
+  const allConds = [shipScope, ...conds].filter(Boolean);
+  const whereSql = allConds.length ? `WHERE ${allConds.join(' AND ')}` : '';
+  const sql = `
+    SELECT
+      e.exception_id,
+      e.event_date,
+      e.shipment_id,
+      e.reason_code,
+      e.severity,
+      e.resolved_date,
+      CASE
+        WHEN e.resolved_date IS NULL THEN NULL
+        ELSE (e.resolved_date - e.event_date)
+      END AS mttr_days
+    FROM exceptions e
+    ${whereSql}
+    ORDER BY e.event_date DESC
+    LIMIT $${p}
+  `;
+  const countSql = `
+    SELECT COUNT(*)::int AS cnt
+    FROM exceptions e
+    ${whereSql}
+  `;
+  return { sql, countSql, params };
+}
+
+function returnDrillSql(filters?: FilterState) {
+  const ship = shipmentFilterWhere(filters);
+  const params = [...ship.params];
+  let p = ship.nextParam;
+  const conds: string[] = [];
+  if (filters?.dateStart) { conds.push(`r.return_date >= $${p++}`); params.push(filters.dateStart); }
+  if (filters?.dateEnd) { conds.push(`r.return_date <= $${p++}`); params.push(filters.dateEnd); }
+  const shipScopeSql = ship.sql.replace(/^WHERE /, '');
+  const shipScope = shipScopeSql
+    ? `r.shipment_id IN (SELECT s.shipment_id FROM shipments s WHERE ${shipScopeSql})`
+    : '';
+  const allConds = [shipScope, ...conds].filter(Boolean);
+  const whereSql = allConds.length ? `WHERE ${allConds.join(' AND ')}` : '';
+  const sql = `
+    SELECT
+      r.return_id,
+      r.return_date,
+      r.shipment_id,
+      r.sku_id,
+      r.reason_code,
+      r.qty_returned,
+      r.refund_amount,
+      r.condition
+    FROM returns r
+    ${whereSql}
+    ORDER BY r.return_date DESC
+    LIMIT $${p}
+  `;
+  const countSql = `
+    SELECT COUNT(*)::int AS cnt
+    FROM returns r
+    ${whereSql}
+  `;
+  return { sql, countSql, params };
+}
+
+const DRILL_SPECS: Record<string, DrillSpec> = {
+  // === Shipment-driven metrics ===
+  otif_rate: {
+    source: 'shipments',
+    rowDescription: 'Shipments that missed OTIF (late or partial)',
+    columns: SHIPMENT_COLUMNS,
+    buildSql: (f) => shipmentDrillSql(
+      `(s.delivered_date IS NULL OR s.delivered_date > s.promised_date OR EXISTS (SELECT 1 FROM shipment_lines sl WHERE sl.shipment_id = s.shipment_id AND COALESCE(sl.qty_backordered,0) > 0))`,
+      f,
+      `(s.delivered_date - s.promised_date) DESC NULLS FIRST, s.order_date DESC`,
+    ),
+  },
+  perfect_order_rate: {
+    source: 'shipments',
+    rowDescription: 'Shipments with any imperfection (late, partial, damaged, or returned)',
+    columns: SHIPMENT_COLUMNS,
+    buildSql: (f) => shipmentDrillSql(
+      `(s.delivered_date IS NULL
+        OR s.delivered_date > s.promised_date
+        OR EXISTS (SELECT 1 FROM shipment_lines sl WHERE sl.shipment_id = s.shipment_id AND COALESCE(sl.qty_backordered,0) > 0)
+        OR EXISTS (SELECT 1 FROM exceptions e WHERE e.shipment_id = s.shipment_id)
+        OR EXISTS (SELECT 1 FROM returns r WHERE r.shipment_id = s.shipment_id))`,
+      f,
+    ),
+  },
+  order_cycle_time: {
+    source: 'shipments',
+    rowDescription: 'Longest order-to-delivery cycles in the window',
+    columns: SHIPMENT_COLUMNS,
+    buildSql: (f) => shipmentDrillSql(
+      `s.delivered_date IS NOT NULL`,
+      f,
+      `(s.delivered_date - s.order_date) DESC, s.order_date DESC`,
+    ),
+  },
+  line_fill_rate: {
+    source: 'shipments',
+    rowDescription: 'Shipments with backordered lines',
+    columns: SHIPMENT_COLUMNS,
+    buildSql: (f) => shipmentDrillSql(
+      `EXISTS (SELECT 1 FROM shipment_lines sl WHERE sl.shipment_id = s.shipment_id AND COALESCE(sl.qty_backordered,0) > 0)`,
+      f,
+    ),
+  },
+  backorder_rate: {
+    source: 'shipments',
+    rowDescription: 'Shipments with backordered lines',
+    columns: SHIPMENT_COLUMNS,
+    buildSql: (f) => shipmentDrillSql(
+      `EXISTS (SELECT 1 FROM shipment_lines sl WHERE sl.shipment_id = s.shipment_id AND COALESCE(sl.qty_backordered,0) > 0)`,
+      f,
+    ),
+  },
+  same_day_ship_rate: {
+    source: 'shipments',
+    rowDescription: 'Shipments NOT shipped same-day',
+    columns: SHIPMENT_COLUMNS,
+    buildSql: (f) => shipmentDrillSql(
+      `(s.shipped_date IS NULL OR s.shipped_date::date <> s.order_date::date)`,
+      f,
+    ),
+  },
+  carrier_otd: {
+    source: 'shipments',
+    rowDescription: 'Late carrier deliveries',
+    columns: SHIPMENT_COLUMNS,
+    buildSql: (f) => shipmentDrillSql(
+      `s.delivered_date IS NOT NULL AND s.delivered_date > s.promised_date`,
+      f,
+      `(s.delivered_date - s.promised_date) DESC, s.order_date DESC`,
+    ),
+  },
+  avg_transit_days: {
+    source: 'shipments',
+    rowDescription: 'Longest in-transit shipments',
+    columns: SHIPMENT_COLUMNS,
+    buildSql: (f) => shipmentDrillSql(
+      `s.shipped_date IS NOT NULL AND s.delivered_date IS NOT NULL`,
+      f,
+      `(s.delivered_date - s.shipped_date) DESC, s.order_date DESC`,
+    ),
+  },
+  damage_rate: {
+    source: 'returns',
+    rowDescription: 'Damage-related returns',
+    columns: RETURN_COLUMNS,
+    buildSql: (f) => {
+      const base = returnDrillSql(f);
+      // Inject damage filter into existing WHERE.
+      const damageFilter = `r.reason_code IN ('damaged','damaged_in_transit','damage')`;
+      const injected = base.sql.includes('WHERE')
+        ? base.sql.replace('WHERE ', `WHERE ${damageFilter} AND `)
+        : base.sql.replace('FROM returns r', `FROM returns r WHERE ${damageFilter}`);
+      const countInjected = base.countSql.includes('WHERE')
+        ? base.countSql.replace('WHERE ', `WHERE ${damageFilter} AND `)
+        : base.countSql.replace('FROM returns r', `FROM returns r WHERE ${damageFilter}`);
+      return { sql: injected, countSql: countInjected, params: base.params };
+    },
+  },
+  warehouse_capacity_util: {
+    source: 'shipments',
+    rowDescription: 'Recent outbound shipments by warehouse',
+    columns: SHIPMENT_COLUMNS,
+    buildSql: (f) => shipmentDrillSql('', f),
+  },
+
+  // === Procurement metrics (PO-driven) ===
+  supplier_otd: {
+    source: 'purchase_orders',
+    rowDescription: 'Late supplier receipts',
+    columns: PO_COLUMNS,
+    buildSql: (f) => poDrillSql(
+      `po.received_date IS NOT NULL AND po.received_date > po.promised_date`,
+      f,
+      `(po.received_date - po.promised_date) DESC, po.ordered_date DESC`,
+    ),
+  },
+  supplier_otif: {
+    source: 'purchase_orders',
+    rowDescription: 'PO lines that missed OTIF (late or short)',
+    columns: PO_COLUMNS,
+    buildSql: (f) => poDrillSql(
+      `(po.received_date IS NULL OR po.received_date > po.promised_date OR po.qty_received < po.qty_ordered)`,
+      f,
+    ),
+  },
+  po_cycle_time: {
+    source: 'purchase_orders',
+    rowDescription: 'Longest PO order-to-receipt cycles',
+    columns: PO_COLUMNS,
+    buildSql: (f) => poDrillSql(
+      `po.received_date IS NOT NULL`,
+      f,
+      `(po.received_date - po.ordered_date) DESC, po.ordered_date DESC`,
+    ),
+  },
+  avg_lead_time: {
+    source: 'purchase_orders',
+    rowDescription: 'Longest supplier lead times in the window',
+    columns: PO_COLUMNS,
+    buildSql: (f) => poDrillSql(
+      `po.received_date IS NOT NULL`,
+      f,
+      `(po.received_date - po.ordered_date) DESC, po.ordered_date DESC`,
+    ),
+  },
+  supplier_defect_rate: {
+    source: 'purchase_orders',
+    rowDescription: 'PO lines with short or rejected receipts',
+    columns: PO_COLUMNS,
+    buildSql: (f) => poDrillSql(
+      `(po.qty_received < po.qty_ordered OR po.status = 'rejected')`,
+      f,
+    ),
+  },
+
+  // === Inventory metrics ===
+  inventory_turns: {
+    source: 'inventory_snapshots',
+    rowDescription: 'Most recent inventory positions',
+    columns: INVENTORY_COLUMNS,
+    buildSql: (f) => inventoryDrillSql('', f),
+  },
+  days_of_supply: {
+    source: 'inventory_snapshots',
+    rowDescription: 'Lowest days-of-supply positions',
+    columns: INVENTORY_COLUMNS,
+    buildSql: (f) => inventoryDrillSql(
+      `i.days_of_supply IS NOT NULL`,
+      f,
+      `i.snapshot_date DESC, i.days_of_supply ASC`,
+    ),
+  },
+  stockout_rate: {
+    source: 'inventory_snapshots',
+    rowDescription: 'Zero-on-hand positions',
+    columns: INVENTORY_COLUMNS,
+    buildSql: (f) => inventoryDrillSql(
+      `i.on_hand_qty <= 0`,
+      f,
+    ),
+  },
+  excess_inventory_value: {
+    source: 'inventory_snapshots',
+    rowDescription: 'Largest excess inventory positions',
+    columns: INVENTORY_COLUMNS,
+    buildSql: (f) => inventoryDrillSql(
+      `i.days_of_supply > 60`,
+      f,
+      `i.snapshot_date DESC, i.days_of_supply DESC`,
+    ),
+  },
+  critical_sku_stockout_rate: {
+    source: 'inventory_snapshots',
+    rowDescription: 'Critical (A-class) SKUs at zero on-hand',
+    columns: INVENTORY_COLUMNS,
+    buildSql: (f) => inventoryDrillSql(
+      `i.on_hand_qty <= 0 AND sk.abc_class = 'A'`,
+      f,
+    ),
+  },
+
+  // === Exception metrics ===
+  exception_rate: {
+    source: 'exceptions',
+    rowDescription: 'Recent exceptions',
+    columns: EXCEPTION_COLUMNS,
+    buildSql: (f) => exceptionDrillSql(f),
+  },
+  avg_exception_mttr: {
+    source: 'exceptions',
+    rowDescription: 'Longest-running exceptions',
+    columns: EXCEPTION_COLUMNS,
+    buildSql: (f) => {
+      const base = exceptionDrillSql(f);
+      return {
+        sql: base.sql.replace('ORDER BY e.event_date DESC', 'ORDER BY (COALESCE(e.resolved_date, CURRENT_DATE) - e.event_date) DESC, e.event_date DESC'),
+        countSql: base.countSql,
+        params: base.params,
+      };
+    },
+  },
+
+  // === Returns ===
+  return_rate: {
+    source: 'returns',
+    rowDescription: 'Recent returns',
+    columns: RETURN_COLUMNS,
+    buildSql: (f) => returnDrillSql(f),
+  },
+};
+
+/** Default fallback for unrecognized metrics — show recent shipments in scope. */
+const DEFAULT_DRILL_SPEC: DrillSpec = {
+  source: 'shipments',
+  rowDescription: 'Recent shipments matching the active filters',
+  columns: SHIPMENT_COLUMNS,
+  buildSql: (f) => shipmentDrillSql('', f),
+};
+
+export async function generateDrill(
+  metricId: string,
+  filters?: FilterState,
+  limit = 50,
+): Promise<DrillSnapshot> {
+  const spec = DRILL_SPECS[metricId] ?? DEFAULT_DRILL_SPEC;
+  const cappedLimit = Math.max(1, Math.min(500, limit));
+  const built = spec.buildSql(filters);
+  const params = [...built.params, cappedLimit];
+
+  const [rowsRes, countRes] = await Promise.all([
+    pool.query(built.sql, params),
+    pool.query(built.countSql, built.params),
+  ]);
+
+  const rows = rowsRes.rows.map((r) => {
+    const out: Record<string, string | number | null> = {};
+    for (const col of spec.columns) {
+      const v = r[col.key];
+      if (v === null || v === undefined) {
+        out[col.key] = null;
+      } else if (v instanceof Date) {
+        out[col.key] = v.toISOString().slice(0, 10);
+      } else if (typeof v === 'string' && /^\d+\.\d+$/.test(v)) {
+        out[col.key] = parseFloat(v);
+      } else {
+        out[col.key] = v as string | number;
+      }
+    }
+    return out;
+  });
+
+  return {
+    metricId,
+    source: spec.source,
+    rowDescription: spec.rowDescription,
+    totalRows: countRes.rows[0]?.cnt ?? 0,
+    limit: cappedLimit,
+    columns: spec.columns,
+    rows,
+  };
 }

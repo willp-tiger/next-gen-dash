@@ -35,13 +35,15 @@ import { formatValue } from '../../lib/format';
 interface DashboardProps {
   config: DashboardConfig;
   userId: string;
+  /** Display name used to attribute pinned notes to the logged-in user. */
+  userName?: string;
   onAuthorKpi?: (phrase: string) => void;
 }
 
 type DashboardTab = 'overview' | 'metrics';
 
 
-export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
+export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardProps) {
   const [dashTab, setDashTab] = useState<DashboardTab>('overview');
   const [isCanonical, setIsCanonical] = useState(false);
   const [activePersona, setActivePersona] = useState<string | null>(null);
@@ -217,6 +219,42 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
     if (newConfig.metrics.some(m => m.chartType === 'breakdown' || m.chartType === 'heatmap')) {
       setShowFilters(true);
     }
+  };
+
+  // === Notes ===
+  // Notes live on MetricConfig and persist with the dashboard config. We treat the metric
+  // id as the note bucket — if a user has two scorecards for the same KPI, they share notes
+  // (intentional: notes are about the KPI, not the tile instance).
+  const persistConfig = (next: DashboardConfig) => {
+    setActiveConfig(next);
+    if (isCanonical || activePersona) return;
+    updateDashboardConfig(userId, { ...next, updatedAt: new Date().toISOString() }).catch(() => {});
+  };
+
+  const addNote = (metricId: string, body: string) => {
+    const note = {
+      id: `n-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      author: userName || 'You',
+      body,
+      createdAt: new Date().toISOString(),
+    };
+    const next: DashboardConfig = {
+      ...activeConfig,
+      metrics: activeConfig.metrics.map(m =>
+        m.id === metricId ? { ...m, notes: [...(m.notes ?? []), note] } : m
+      ),
+    };
+    persistConfig(next);
+  };
+
+  const removeNote = (metricId: string, noteId: string) => {
+    const next: DashboardConfig = {
+      ...activeConfig,
+      metrics: activeConfig.metrics.map(m =>
+        m.id === metricId ? { ...m, notes: (m.notes ?? []).filter(n => n.id !== noteId) } : m
+      ),
+    };
+    persistConfig(next);
   };
 
   const applyGlobalFilters = (metric: MetricConfig): MetricConfig => {
@@ -706,16 +744,20 @@ export function Dashboard({ config, userId, onAuthorKpi }: DashboardProps) {
         />
       )}
 
-      {/* Metric detail drawer */}
-      {selectedMetric && snapshot && (() => {
+      {/* Metric detail drawer — opens for any selected tile, including self-fetching widgets
+          (pivot/funnel/waterfall/calendar) where snapshot.metrics has no entry. */}
+      {selectedMetric && (() => {
         const metric = visibleMetrics.find(m => m.id === selectedMetric);
         if (!metric) return null;
-        const val = snapshot.metrics[metric.id];
-        if (!val) return null;
+        const val = snapshot?.metrics[metric.id];
         return (
           <MetricDetailDrawer
             metric={metric}
             value={val}
+            filters={filters}
+            noteAuthor={userName}
+            onAddNote={addNote}
+            onRemoveNote={removeNote}
             onClose={() => setSelectedMetric(null)}
           />
         );
