@@ -16,6 +16,9 @@ import kpiStudioRouter from './routes/kpiStudio.js';
 import kpisRouter from './routes/kpis.js';
 import authRouter from './routes/auth.js';
 
+import { runMigrations } from './services/migrate.js';
+import { initKpiDefinitions } from './services/kpiDefinitionStore.js';
+
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
@@ -43,8 +46,17 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+async function start() {
+  await runMigrations();
+  await initKpiDefinitions();
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+start().catch(err => {
+  console.error('Server startup failed:', err);
+  process.exit(1);
 });
 
 export default app;

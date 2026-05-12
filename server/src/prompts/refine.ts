@@ -1,4 +1,5 @@
 import type { InteractionEvent, MetricConfig } from '../../../shared/types.js';
+import { getMetricDefs } from '../services/kpiDefinitionStore.js';
 
 export function buildRefinementPrompt(
   interactions: InteractionEvent[],
@@ -10,6 +11,8 @@ export function buildRefinementPrompt(
     return acc;
   }, {});
 
+  const allMetricIds = getMetricDefs().map(d => d.id);
+
   return `You are a dashboard refinement assistant. Analyze the user's interaction data and suggest ONE adjustment to their sales dashboard.
 
 ## Current Dashboard Metrics
@@ -19,7 +22,7 @@ ${currentMetrics.map((m) => `- ${m.id} (${m.label}, position: ${m.position}, siz
 ${Object.entries(interactionSummary).map(([id, count]) => `- ${id}: ${count} interactions`).join('\n')}
 
 ## Available Metrics Not on Dashboard
-${['total_revenue', 'avg_order_value', 'total_orders', 'units_sold', 'avg_price', 'fulfillment_rate', 'cancelled_order_rate', 'avg_deal_size_value', 'revenue_per_customer', 'order_frequency', 'product_line_count', 'territory_revenue_share']
+${allMetricIds
   .filter((id) => !currentIds.includes(id))
   .map((id) => `- ${id}`)
   .join('\n') || '(none)'}

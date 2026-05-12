@@ -1,30 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
-import { KPI_REGISTRY, TEST_ASSERTIONS, VERSION_HISTORY } from '../../data/kpiRegistry';
 import type { KpiDefinition } from '../../data/kpiRegistry';
-import { getPublishedKpis } from '../../api/client';
-import type { PublishedKpi } from '../../api/client';
+import { getKpiCatalog, getKpiHealth } from '../../api/client';
+import type { KpiDefinitionRow, KpiVersionRow, KpiHealthSummary, AssertionResult } from '../../api/client';
 
-function publishedToKpiDefinition(p: PublishedKpi): KpiDefinition {
+function rowToKpiDefinition(r: KpiDefinitionRow): KpiDefinition {
   return {
-    kpiId: p.kpiId,
-    version: p.version,
-    displayName: p.displayName,
-    description: p.description,
-    unit: p.unit,
-    direction: p.direction,
-    sqlLogic: p.sqlLogic,
-    sourceTables: ['production.sales.sales_orders'],
-    grain: p.grain,
-    dimensions: p.dimensions,
-    defaultThresholds: p.thresholds,
-    materialization: 'live',
-    schedule: null,
-    owner: p.createdBy,
-    status: 'published',
-    createdAt: p.createdAt,
-    createdBy: p.createdBy,
-    changeReason: 'Published from KPI Authoring Studio',
-    tags: ['studio-authored'],
+    kpiId: r.kpiId,
+    version: r.version,
+    displayName: r.displayName,
+    description: r.description,
+    unit: r.unit,
+    direction: r.direction,
+    sqlLogic: r.sqlLogic,
+    sourceTables: r.sourceTables,
+    grain: r.grain,
+    dimensions: r.dimensions,
+    defaultThresholds: { greenMax: r.greenMax, yellowMax: r.yellowMax },
+    materialization: (r.materialization === 'scheduled' ? 'scheduled' : 'live') as 'live' | 'scheduled',
+    schedule: r.schedule,
+    owner: r.owner,
+    status: r.status as KpiDefinition['status'],
+    createdAt: r.createdAt,
+    createdBy: r.createdBy,
+    changeReason: r.changeReason,
+    tags: r.tags,
   };
 }
 
@@ -53,8 +52,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function TestStatusDot({ kpiId }: { kpiId: string }) {
-  const assertions = TEST_ASSERTIONS.filter(a => a.kpiId === kpiId);
+function TestStatusDot({ assertions }: { assertions: AssertionResult[] }) {
   if (assertions.length === 0) return <span className="text-xs text-slate-400">No tests</span>;
   const hasFail = assertions.some(a => a.lastResult === 'fail');
   const hasWarn = assertions.some(a => a.lastResult === 'warn');
@@ -68,9 +66,13 @@ function TestStatusDot({ kpiId }: { kpiId: string }) {
   );
 }
 
-function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => void }) {
+function KpiDetailPanel({ kpi, assertions, versions, onClose }: {
+  kpi: KpiDefinition;
+  assertions: AssertionResult[];
+  versions: KpiVersionRow[];
+  onClose: () => void;
+}) {
   const [activeTab, setActiveTab] = useState<'sql' | 'tests' | 'versions'>('sql');
-  const assertions = TEST_ASSERTIONS.filter(a => a.kpiId === kpi.kpiId);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -79,12 +81,14 @@ function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => v
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
-  const versions = VERSION_HISTORY[kpi.kpiId] ?? [{ version: kpi.version, createdAt: kpi.createdAt, createdBy: kpi.createdBy, changeReason: kpi.changeReason, status: kpi.status as 'published' | 'deprecated' }];
+
+  const versionList = versions.length > 0
+    ? versions
+    : [{ version: kpi.version, createdAt: kpi.createdAt, createdBy: kpi.createdBy, changeReason: kpi.changeReason, status: kpi.status }];
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-16" onClick={onClose}>
       <div className="w-full max-w-3xl rounded-xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
-        {/* Header */}
         <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
           <div>
             <div className="flex items-center gap-2">
@@ -100,7 +104,6 @@ function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => v
           </button>
         </div>
 
-        {/* Metadata grid */}
         <div className="grid grid-cols-4 gap-4 border-b border-slate-100 px-6 py-3 text-sm">
           <div><span className="text-slate-400">Unit</span><div className="font-medium text-slate-700">{kpi.unit}</div></div>
           <div><span className="text-slate-400">Direction</span><div className="font-medium text-slate-700">{kpi.direction}</div></div>
@@ -112,7 +115,6 @@ function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => v
           <div><span className="text-slate-400">Thresholds</span><div className="font-medium text-slate-700">G: \u2264{kpi.defaultThresholds.greenMax} / Y: \u2264{kpi.defaultThresholds.yellowMax}</div></div>
         </div>
 
-        {/* Source tables */}
         <div className="border-b border-slate-100 px-6 py-2 text-sm">
           <span className="text-slate-400">Source Tables: </span>
           {kpi.sourceTables.map(t => (
@@ -120,7 +122,6 @@ function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => v
           ))}
         </div>
 
-        {/* Tabs */}
         <div className="border-b border-slate-200 px-6">
           <div className="flex gap-6">
             {(['sql', 'tests', 'versions'] as const).map(tab => (
@@ -129,13 +130,12 @@ function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => v
                 onClick={() => setActiveTab(tab)}
                 className={`border-b-2 py-3 text-sm font-medium transition ${activeTab === tab ? 'border-accent text-accent' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
               >
-                {tab === 'sql' ? 'SQL Logic' : tab === 'tests' ? `Tests (${assertions.length})` : `Versions (${versions.length})`}
+                {tab === 'sql' ? 'SQL Logic' : tab === 'tests' ? `Tests (${assertions.length})` : `Versions (${versionList.length})`}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Tab content */}
         <div className="max-h-80 overflow-auto px-6 py-4">
           {activeTab === 'sql' && (
             <pre className="rounded-lg bg-slate-900 p-4 text-sm text-slate-100 overflow-x-auto">
@@ -145,7 +145,7 @@ function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => v
 
           {activeTab === 'tests' && (
             <div className="space-y-2">
-              {assertions.length === 0 && <p className="text-sm text-slate-400">No test assertions defined.</p>}
+              {assertions.length === 0 && <p className="text-sm text-slate-400">No test assertions have been run yet.</p>}
               {assertions.map(a => (
                 <div key={a.assertionId} className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-2.5">
                   <div className="flex items-center gap-3">
@@ -169,7 +169,7 @@ function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => v
           {activeTab === 'versions' && (
             <div className="relative pl-6">
               <div className="absolute left-2.5 top-0 bottom-0 w-px bg-slate-200" />
-              {[...versions].reverse().map((v, i) => (
+              {[...versionList].reverse().map((v, i) => (
                 <div key={v.version} className="relative mb-4 last:mb-0">
                   <div className={`absolute -left-[14px] top-1 h-3 w-3 rounded-full border-2 border-white ${i === 0 ? 'bg-accent' : 'bg-slate-300'}`} />
                   <div className="rounded-lg border border-slate-200 px-4 py-2.5">
@@ -189,7 +189,6 @@ function KpiDetailPanel({ kpi, onClose }: { kpi: KpiDefinition; onClose: () => v
           )}
         </div>
 
-        {/* Footer */}
         <div className="flex justify-end border-t border-slate-200 px-6 py-3">
           <button onClick={onClose} className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200">Close</button>
         </div>
@@ -204,25 +203,41 @@ export function KpiCatalog() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedKpi, setSelectedKpi] = useState<KpiDefinition | null>(null);
-  const [published, setPublished] = useState<PublishedKpi[]>([]);
   const [sortBy, setSortBy] = useState<SortKey>('name');
   const [sortAsc, setSortAsc] = useState(true);
+  const [registry, setRegistry] = useState<KpiDefinition[]>([]);
+  const [versions, setVersions] = useState<Record<string, KpiVersionRow[]>>({});
+  const [healthMap, setHealthMap] = useState<Record<string, AssertionResult[]>>({});
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const load = () => getPublishedKpis().then(d => setPublished(d.kpis)).catch(() => {});
+    async function load() {
+      try {
+        const [catalogData, healthData] = await Promise.all([
+          getKpiCatalog(),
+          getKpiHealth(),
+        ]);
+
+        setRegistry(catalogData.definitions.map(rowToKpiDefinition));
+        setVersions(catalogData.versions);
+
+        const hMap: Record<string, AssertionResult[]> = {};
+        for (const summary of healthData.summaries) {
+          hMap[summary.kpiId] = summary.assertions;
+        }
+        setHealthMap(hMap);
+      } catch (err) {
+        console.error('Failed to load catalog:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
     load();
     const t = setInterval(() => {
       if (!document.hidden) load();
-    }, 10_000);
+    }, 30_000);
     return () => clearInterval(t);
   }, []);
-
-  // Studio-published KPIs override built-in registry entries if IDs collide
-  const registry = useMemo(() => {
-    const publishedIds = new Set(published.map(p => p.kpiId));
-    const base = KPI_REGISTRY.filter(k => !publishedIds.has(k.kpiId));
-    return [...published.map(publishedToKpiDefinition), ...base];
-  }, [published]);
 
   const handleSort = (key: SortKey) => {
     if (sortBy === key) setSortAsc(!sortAsc);
@@ -250,15 +265,21 @@ export function KpiCatalog() {
     return acc;
   }, {} as Record<string, number>);
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-sm text-slate-400">Loading KPI catalog...</div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      {/* Page header */}
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-slate-900">KPI Catalog</h2>
         <p className="mt-1 text-sm text-slate-500">Browse, search, and inspect all registered KPI definitions in the semantic layer.</p>
       </div>
 
-      {/* Summary cards */}
       <div className="mb-6 grid grid-cols-5 gap-3">
         {(['published', 'validated', 'draft', 'validating', 'deprecated'] as const).map(status => (
           <button
@@ -272,7 +293,6 @@ export function KpiCatalog() {
         ))}
       </div>
 
-      {/* Search */}
       <div className="mb-4">
         <div className="relative">
           <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -288,7 +308,6 @@ export function KpiCatalog() {
         </div>
       </div>
 
-      {/* Sort controls */}
       <div className="mb-3 flex items-center gap-1 text-[11px]">
         <span className="text-slate-400 font-medium mr-1">Sort by</span>
         {([
@@ -314,7 +333,6 @@ export function KpiCatalog() {
         ))}
       </div>
 
-      {/* KPI list */}
       <div className="space-y-2">
         {filtered.map(kpi => (
           <button
@@ -340,7 +358,7 @@ export function KpiCatalog() {
                 </div>
               </div>
               <div className="ml-4 flex flex-col items-end gap-2">
-                <TestStatusDot kpiId={kpi.kpiId} />
+                <TestStatusDot assertions={healthMap[kpi.kpiId] ?? []} />
                 <div className="flex gap-1">
                   {kpi.tags.slice(0, 3).map(t => (
                     <span key={t} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">{t}</span>
@@ -355,8 +373,14 @@ export function KpiCatalog() {
         )}
       </div>
 
-      {/* Detail modal */}
-      {selectedKpi && <KpiDetailPanel kpi={selectedKpi} onClose={() => setSelectedKpi(null)} />}
+      {selectedKpi && (
+        <KpiDetailPanel
+          kpi={selectedKpi}
+          assertions={healthMap[selectedKpi.kpiId] ?? []}
+          versions={versions[selectedKpi.kpiId] ?? []}
+          onClose={() => setSelectedKpi(null)}
+        />
+      )}
     </div>
   );
 }

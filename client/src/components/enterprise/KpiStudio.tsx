@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { CATALOG_TABLES } from '../../data/kpiRegistry';
-import type { CatalogTable, ValidationResult } from '../../data/kpiRegistry';
-import { kpiStudioChat, publishKpi, streamValidateKpi, ApiError } from '../../api/client';
+import type { ValidationResult, CatalogTable } from '../../data/kpiRegistry';
+import { kpiStudioChat, publishKpi, streamValidateKpi, getSchemaTables, ApiError } from '../../api/client';
 
 const PIPELINE_STAGES = [
   'Schema Validation',
@@ -31,83 +30,23 @@ interface CandidateKpi {
   thresholds: { greenMax: number; yellowMax: number };
 }
 
-// Kept for reference / offline fallback; the live chat goes through /api/kpi-studio.
-const DEMO_FLOWS: Record<string, { reply: string; candidate?: CandidateKpi }> = {
-  default: {
-    reply: "I can see the `production.sales.sales_orders` table with order, pricing, and customer data. Could you tell me more about what you'd like to measure? For example:\n\n- A rate or percentage (e.g., \"% of orders that are Large deals\")\n- An average or aggregate (e.g., \"average discount from MSRP\")\n- A count or ratio (e.g., \"orders per customer by territory\")",
-  },
-  large: {
-    reply: "I can see the `deal_size` column in `production.sales.sales_orders`. Here's what I'd create:\n\n**Large Deal Rate** \u2014 Percentage of orders classified as Large deal size.\n\nI've generated the SQL and metadata. Review the candidate below and let me know if you'd like to adjust anything.",
-    candidate: {
-      displayName: 'Large Deal Rate',
-      description: 'Percentage of orders classified as Large deal size. Tracks enterprise deal pipeline health.',
-      kpiId: 'large_deal_rate',
-      unit: 'percent',
-      direction: 'higher-is-better',
-      sqlLogic: `SELECT COUNT(CASE WHEN deal_size = 'Large' THEN 1 END)\n       * 100.0 / NULLIF(COUNT(DISTINCT order_number), 0) AS value\nFROM production.sales.sales_orders\nWHERE year_id = :year AND qtr_id = :quarter`,
-      grain: 'quarterly',
-      dimensions: ['product_line', 'territory', 'country'],
-      thresholds: { greenMax: 15, yellowMax: 8 },
-    },
-  },
-  discount: {
-    reply: "I found the `msrp` and `price_each` columns in `production.sales.sales_orders`. Here's a KPI that measures average discount depth from MSRP \u2014 useful for tracking pricing discipline:\n\nReview the candidate below.",
-    candidate: {
-      displayName: 'Discount Depth',
-      description: 'Average percentage discount from MSRP. Higher values indicate more margin erosion.',
-      kpiId: 'discount_depth',
-      unit: 'percent',
-      direction: 'lower-is-better',
-      sqlLogic: `SELECT AVG((msrp - price_each) / NULLIF(msrp, 0)) * 100 AS value\nFROM production.sales.sales_orders\nWHERE year_id = :year AND qtr_id = :quarter`,
-      grain: 'quarterly',
-      dimensions: ['product_line', 'territory', 'deal_size'],
-      thresholds: { greenMax: 10, yellowMax: 20 },
-    },
-  },
-  single: {
-    reply: "I can compute this using a window over `order_number` in `production.sales.sales_orders`. Here's a KPI that tracks single-item orders as a proxy for cross-sell effectiveness:\n\nReview the candidate below.",
-    candidate: {
-      displayName: 'Single-Item Order Rate',
-      description: 'Percentage of orders with only one line item. Lower is better \u2014 indicates cross-sell success.',
-      kpiId: 'single_product_orders',
-      unit: 'percent',
-      direction: 'lower-is-better',
-      sqlLogic: `WITH order_sizes AS (\n  SELECT order_number, COUNT(*) AS line_count\n  FROM production.sales.sales_orders\n  GROUP BY order_number\n)\nSELECT COUNT(CASE WHEN line_count = 1 THEN 1 END)\n       * 100.0 / NULLIF(COUNT(*), 0) AS value\nFROM order_sizes`,
-      grain: 'all-time',
-      dimensions: ['product_line', 'territory'],
-      thresholds: { greenMax: 15, yellowMax: 30 },
-    },
-  },
-  repeat: {
-    reply: "I can identify repeat customers by counting distinct orders per customer in `production.sales.sales_orders`. Here's a KPI that measures the repeat purchase rate:\n\nReview the candidate below.",
-    candidate: {
-      displayName: 'Repeat Customer Rate',
-      description: 'Percentage of customers with more than one order. Measures customer loyalty and retention.',
-      kpiId: 'repeat_customer_rate',
-      unit: 'percent',
-      direction: 'higher-is-better',
-      sqlLogic: `WITH customer_orders AS (\n  SELECT customer_name, COUNT(DISTINCT order_number) AS order_count\n  FROM production.sales.sales_orders\n  GROUP BY customer_name\n)\nSELECT COUNT(CASE WHEN order_count > 1 THEN 1 END)\n       * 100.0 / NULLIF(COUNT(*), 0) AS value\nFROM customer_orders`,
-      grain: 'all-time',
-      dimensions: ['territory', 'country'],
-      thresholds: { greenMax: 70, yellowMax: 50 },
-    },
-  },
-};
-
-function offlineFallback(message: string): { reply: string; candidate?: CandidateKpi } {
-  const lower = message.toLowerCase();
-  for (const [key, flow] of Object.entries(DEMO_FLOWS)) {
-    if (key !== 'default' && lower.includes(key)) return flow;
-  }
-  return DEMO_FLOWS.default;
-}
-
 function SchemaExplorer({ onTableSelect }: { onTableSelect: (t: CatalogTable) => void }) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [tables, setTables] = useState<CatalogTable[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getSchemaTables()
+      .then(data => setTables(data.tables))
+      .catch(err => console.error('Failed to load schema:', err))
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <div className="h-full overflow-auto">
       <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Unity Catalog</div>
-      {CATALOG_TABLES.map(table => {
+      {loading && <div className="px-3 py-4 text-xs text-slate-400">Loading schema...</div>}
+      {tables.map(table => {
         const fullName = `${table.catalog}.${table.schema}.${table.table}`;
         const isOpen = expanded === fullName;
         return (
@@ -266,9 +205,6 @@ export function KpiStudio({ seedPrompt, onSeedConsumed }: KpiStudioProps = {}) {
         if (body?.message) text = body.message;
       }
       setMessages(prev => [...prev, { role: 'assistant', content: text }]);
-      // Fallback to keyword demo so the user can still see something.
-      const offline = offlineFallback(userMsg);
-      if (offline.candidate) setCandidate(offline.candidate);
     } finally {
       setIsLoading(false);
       isLoadingRef.current = false;

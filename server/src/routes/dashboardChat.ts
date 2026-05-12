@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
-import { DASHBOARD_CHAT_SYSTEM_PROMPT } from '../prompts/dashboardChat.js';
+import { buildDashboardChatPrompt } from '../prompts/dashboardChat.js';
 import { getConfig, setConfig } from '../services/configStore.js';
 import { classifyLLMError } from '../services/llmErrors.js';
 import { getPublishedKpis } from '../services/kpiStore.js';
@@ -83,7 +83,7 @@ router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) 
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: 1024,
-      system: DASHBOARD_CHAT_SYSTEM_PROMPT,
+      system: buildDashboardChatPrompt(),
       messages: history,
     });
 

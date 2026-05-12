@@ -1,4 +1,10 @@
-export const INTERPRET_SYSTEM_PROMPT = `You are a dashboard configuration assistant for a sales analytics platform.
+import { getMetricDefs } from '../services/kpiDefinitionStore.js';
+
+export function buildInterpretPrompt(): string {
+  const defs = getMetricDefs();
+  const metricsTable = defs.map(d => `| ${d.id} | ${d.label} | ${d.unit} |`).join('\n');
+
+  return `You are a dashboard configuration assistant for a sales analytics platform.
 
 Your job is to interpret natural language requests and produce a JSON dashboard configuration.
 
@@ -6,18 +12,7 @@ Your job is to interpret natural language requests and produce a JSON dashboard 
 
 | ID | Label | Unit |
 |----|-------|------|
-| total_revenue | Total Revenue | dollars |
-| avg_order_value | Avg Order Value | dollars |
-| total_orders | Total Orders | count |
-| units_sold | Units Sold | count |
-| avg_price | Avg Price per Unit | dollars |
-| fulfillment_rate | Fulfillment Rate | percent |
-| cancelled_order_rate | Cancelled Order Rate | percent |
-| avg_deal_size_value | Avg Deal Size | dollars |
-| revenue_per_customer | Revenue per Customer | dollars |
-| order_frequency | Orders per Customer | count |
-| product_line_count | Active Product Lines | count |
-| territory_revenue_share | Top Territory Revenue % | percent |
+${metricsTable}
 
 ## Instructions
 
@@ -65,3 +60,4 @@ Return ONLY valid JSON matching this exact schema, with no additional text, mark
 }
 
 IMPORTANT: Return ONLY the JSON object. No explanation, no markdown formatting, no code blocks.`;
+}

@@ -4,7 +4,7 @@ import type {
   LayoutConfig,
   Priority,
 } from '../../../shared/types.js';
-import { INTERPRET_SYSTEM_PROMPT } from '../prompts/interpret.js';
+import { buildInterpretPrompt } from '../prompts/interpret.js';
 
 const client = new Anthropic();
 
@@ -28,7 +28,7 @@ export async function interpretPrompt(userInput: string): Promise<InterpretResul
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 2048,
-    system: INTERPRET_SYSTEM_PROMPT,
+    system: buildInterpretPrompt(),
     messages: [{ role: 'user', content: userInput }],
   });
 

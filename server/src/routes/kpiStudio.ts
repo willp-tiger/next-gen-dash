@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
-import { KPI_STUDIO_SYSTEM_PROMPT } from '../prompts/kpiStudio.js';
+import { buildKpiStudioPrompt } from '../prompts/kpiStudio.js';
 import { classifyLLMError } from '../services/llmErrors.js';
 import { publishKpi } from '../services/kpiStore.js';
 import { validateKpiCandidate, VALIDATION_STAGES } from '../services/kpiValidation.js';
@@ -55,10 +55,11 @@ router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) 
     const history = histories.get(userId) || [];
     history.push({ role: 'user', content: message });
 
+    const systemPrompt = await buildKpiStudioPrompt();
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: 1500,
-      system: KPI_STUDIO_SYSTEM_PROMPT,
+      system: systemPrompt,
       messages: history,
     });
 
