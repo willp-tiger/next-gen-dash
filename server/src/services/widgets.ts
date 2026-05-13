@@ -99,7 +99,7 @@ export function getAnnotations(): AnnotationEvent[] {
 // SUM(s.total_value)-style aggregation. For others we return a "value distribution" — counts
 // of shipments per cell — so the widget always renders something sensible.
 
-const PIVOT_DIM_SPECS: Record<PivotDimension, { joinClause: string; expr: string }> = {
+export const PIVOT_DIM_SPECS: Record<PivotDimension, { joinClause: string; expr: string }> = {
   category:           { joinClause: 'JOIN shipment_lines sl ON sl.shipment_id = s.shipment_id JOIN skus sk ON sk.sku_id = sl.sku_id', expr: 'sk.category' },
   abc_class:          { joinClause: 'JOIN shipment_lines sl ON sl.shipment_id = s.shipment_id JOIN skus sk ON sk.sku_id = sl.sku_id', expr: 'sk.abc_class' },
   destination_region: { joinClause: '',                                                                                              expr: 's.destination_region' },
@@ -120,7 +120,7 @@ function buildShipmentWhere(filters?: FilterState): { sql: string; params: unkno
 }
 
 /** Map a metric to a pivot value expression and any extra joins it needs. */
-function pivotValueExprFor(def: MetricDefinition): { valueExpr: string; extraJoin: string } {
+export function pivotValueExprFor(def: MetricDefinition): { valueExpr: string; extraJoin: string } {
   const id = def.id;
   // OTIF-family rates: percent on-time AND in-full per cell.
   if (id === 'otif_rate' || id === 'perfect_order_rate') {

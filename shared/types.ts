@@ -199,6 +199,8 @@ export interface CategoricalSnapshot {
     byRegion: CategoryBreakdown;
     byWarehouse: CategoryBreakdown;
     bySegment: CategoryBreakdown;
+    byAbcClass: CategoryBreakdown;
+    bySupplierTier: CategoryBreakdown;
   };
 }
 

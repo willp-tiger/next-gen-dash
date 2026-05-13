@@ -53,12 +53,12 @@ export function HeatMapChart({ metric, onClick }: HeatMapChartProps) {
   const fetchData = useCallback(async () => {
     try {
       setError(null);
-      const data = await getHeatmapBreakdown(rowDim, colDim, metric.filterBy || {});
+      const data = await getHeatmapBreakdown(rowDim, colDim, metric.filterBy || {}, metric.id);
       setSnapshot(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load heatmap');
     }
-  }, [rowDim, colDim, metric.filterBy]);
+  }, [rowDim, colDim, metric.filterBy, metric.id]);
 
   useEffect(() => {
     fetchData();
@@ -140,7 +140,7 @@ export function HeatMapChart({ metric, onClick }: HeatMapChartProps) {
                           color: getTextColor(val, minVal, maxVal, dir),
                         }}
                       >
-                        {formatAxis(val, 'dollars')}
+                        {formatAxis(val, metric.unit || 'dollars')}
                       </div>
                     )}
                   </td>

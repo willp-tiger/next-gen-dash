@@ -333,8 +333,8 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
 
     if (metric.chartType === 'breakdown' || metric.chartType === 'heatmap') {
       const filtered = applyGlobalFilters(metric);
-      if (metric.chartType === 'heatmap') return <HeatMapChart metric={filtered} />;
-      return <BreakdownChart metric={filtered} />;
+      if (metric.chartType === 'heatmap') return <HeatMapChart metric={filtered} onClick={openDetail} />;
+      return <BreakdownChart metric={filtered} onClick={openDetail} />;
     }
 
     // Snapshot-backed tiles

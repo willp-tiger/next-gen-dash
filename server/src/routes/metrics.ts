@@ -89,7 +89,8 @@ router.get('/heatmap', async (req: Request, res: Response) => {
   try {
     const row = (req.query.row as string | undefined) || 'category';
     const col = (req.query.col as string | undefined) || 'destination_region';
-    const snapshot = await generateHeatmapBreakdown(row, col, parseFilters(req));
+    const metricId = req.query.metricId as string | undefined;
+    const snapshot = await generateHeatmapBreakdown(row, col, parseFilters(req), metricId);
     res.json(snapshot);
   } catch (err) {
     console.error('Heatmap error:', err);

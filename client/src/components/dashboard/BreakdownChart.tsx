@@ -37,6 +37,10 @@ export function BreakdownChart({ metric, onClick }: BreakdownChartProps) {
         ? data.breakdowns.byWarehouse
         : dim === 'customer_segment'
         ? data.breakdowns.bySegment
+        : dim === 'abc_class'
+        ? data.breakdowns.byAbcClass
+        : dim === 'supplier_tier'
+        ? data.breakdowns.bySupplierTier
         : data.breakdowns.byCategory;
       setBreakdown(bd);
     } catch {

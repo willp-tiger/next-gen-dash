@@ -144,10 +144,11 @@ export interface HeatmapSnapshot {
   grid: (number | null)[][];
 }
 
-export function getHeatmapBreakdown(row: string, col: string, filters?: FilterState) {
+export function getHeatmapBreakdown(row: string, col: string, filters?: FilterState, metricId?: string) {
   const params = new URLSearchParams();
   params.set('row', row);
   params.set('col', col);
+  if (metricId) params.set('metricId', metricId);
   buildFilterParams(params, filters);
   return fetchJson<HeatmapSnapshot>(`/metrics/heatmap?${params.toString()}`);
 }

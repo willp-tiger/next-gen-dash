@@ -3,6 +3,7 @@ import { getPublishedKpi, getPublishedKpis } from './kpiStore.js';
 import type { PublishedKpi } from './kpiStore.js';
 import { getMetricDefs, normalizePublishedSql } from './kpiDefinitionStore.js';
 import type { MetricDefinition } from './kpiDefinitionStore.js';
+import { PIVOT_DIM_SPECS, pivotValueExprFor } from './widgets.js';
 import type {
   MetricsSnapshot,
   MetricValue,
@@ -358,39 +359,37 @@ export async function generateCategoricalSnapshot(
   const snapshot = await generateSnapshot(metricIds, filters);
   const where = buildShipmentWhere(filters);
 
-  const [byCategory, byRegion, byWarehouse, bySegment] = await Promise.all([
-    // Shipment value by SKU category
-    pool.query(
-      `SELECT sk.category AS label, SUM(sl.line_total) AS value
-       FROM shipments s
-       JOIN shipment_lines sl ON sl.shipment_id = s.shipment_id
-       JOIN skus sk ON sk.sku_id = sl.sku_id
-       ${where.sql}
-       GROUP BY sk.category ORDER BY value DESC`,
-      where.params
-    ),
-    pool.query(
-      `SELECT s.destination_region AS label, SUM(s.total_value) AS value
-       FROM shipments s
-       ${where.sql}
-       GROUP BY s.destination_region ORDER BY value DESC`,
-      where.params
-    ),
-    pool.query(
-      `SELECT s.warehouse_id AS label, SUM(s.total_value) AS value
-       FROM shipments s
-       ${where.sql}
-       GROUP BY s.warehouse_id ORDER BY value DESC`,
-      where.params
-    ),
-    pool.query(
-      `SELECT c.segment AS label, SUM(s.total_value) AS value
-       FROM shipments s
-       JOIN customers c ON c.customer_id = s.customer_id
-       ${where.sql}
-       GROUP BY c.segment ORDER BY value DESC`,
-      where.params
-    ),
+  // Resolve the requested metric so the breakdown values are computed *for that metric*
+  // (OTIF %, exception rate %, etc.) — not always SUM(shipment value). When unknown or
+  // omitted, pivotValueExprFor falls back to SUM(s.total_value), preserving the prior
+  // "revenue by dim" behavior for callers that don't pass a metric.
+  const defs = getMetricDefs();
+  const def = metricIds && metricIds.length > 0
+    ? defs.find(d => d.id === metricIds[0])
+    : undefined;
+  const valueExpr = def
+    ? pivotValueExprFor(def).valueExpr
+    : 'SUM(s.total_value)';
+
+  const dimSql = (dim: keyof typeof PIVOT_DIM_SPECS): string => {
+    const spec = PIVOT_DIM_SPECS[dim];
+    return `
+      SELECT ${spec.expr} AS label, ${valueExpr} AS value
+      FROM shipments s
+      ${spec.joinClause}
+      ${where.sql}
+      GROUP BY ${spec.expr}
+      ORDER BY value DESC
+    `;
+  };
+
+  const [byCategory, byRegion, byWarehouse, bySegment, byAbcClass, bySupplierTier] = await Promise.all([
+    pool.query(dimSql('category'), where.params),
+    pool.query(dimSql('destination_region'), where.params),
+    pool.query(dimSql('warehouse_id'), where.params),
+    pool.query(dimSql('customer_segment'), where.params),
+    pool.query(dimSql('abc_class'), where.params),
+    pool.query(dimSql('supplier_tier'), where.params),
   ]);
 
   const toBreakdown = (cat: string, rows: { label: string; value: string }[]): CategoryBreakdown => ({
@@ -407,6 +406,8 @@ export async function generateCategoricalSnapshot(
       byRegion: toBreakdown('destination_region', byRegion.rows),
       byWarehouse: toBreakdown('warehouse_id', byWarehouse.rows),
       bySegment: toBreakdown('customer_segment', bySegment.rows),
+      byAbcClass: toBreakdown('abc_class', byAbcClass.rows),
+      bySupplierTier: toBreakdown('supplier_tier', bySupplierTier.rows),
     },
   };
 }
@@ -436,7 +437,8 @@ const HEATMAP_DIMS: Record<string, { joinClause: string; expr: string }> = {
 export async function generateHeatmapBreakdown(
   rowDim: string,
   colDim: string,
-  filters?: FilterState
+  filters?: FilterState,
+  metricId?: string,
 ): Promise<HeatmapSnapshot> {
   const rowSpec = HEATMAP_DIMS[rowDim];
   const colSpec = HEATMAP_DIMS[colDim];
@@ -449,10 +451,16 @@ export async function generateHeatmapBreakdown(
   if (rowSpec.joinClause) joins.add(rowSpec.joinClause);
   if (colSpec.joinClause) joins.add(colSpec.joinClause);
 
-  // Always need shipment_lines for value summation
+  // shipment_lines join is required when either dim resolves through SKUs.
   const needsLines = rowSpec.expr.startsWith('sk.') || colSpec.expr.startsWith('sk.');
   const lineJoin = needsLines ? 'JOIN shipment_lines sl ON sl.shipment_id = s.shipment_id' : '';
-  const valueExpr = needsLines ? 'SUM(sl.line_total)' : 'SUM(s.total_value)';
+
+  // Value expression depends on the requested metric. Without one, fall back to
+  // dollar totals (line revenue when a SKU join exists, shipment revenue otherwise).
+  const def = metricId ? getMetricDefs().find(d => d.id === metricId) : undefined;
+  const valueExpr = def
+    ? pivotValueExprFor(def).valueExpr
+    : (needsLines ? 'SUM(sl.line_total)' : 'SUM(s.total_value)');
 
   const sql = `
     SELECT ${rowSpec.expr} AS row_label, ${colSpec.expr} AS col_label, ${valueExpr} AS value
