@@ -106,8 +106,10 @@ export const SUPPLY_CHAIN_DDL: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_shp_status ON shipments(status)`,
   `CREATE INDEX IF NOT EXISTS idx_shp_customer ON shipments(customer_id)`,
   `CREATE INDEX IF NOT EXISTS idx_shp_warehouse ON shipments(warehouse_id)`,
-  // Partial index — we only ever aggregate WHERE is_perfect_order = TRUE.
-  `CREATE INDEX IF NOT EXISTS idx_shp_perfect ON shipments(is_perfect_order) WHERE is_perfect_order = TRUE`,
+  // Note: the partial index on is_perfect_order is created inside
+  // ensurePerfectOrderFlag() in migrate.ts, AFTER the column is ALTERed into the table.
+  // Putting it here would crash on existing DBs where the column doesn't exist yet —
+  // CREATE TABLE IF NOT EXISTS doesn't backfill columns.
 
   `CREATE TABLE IF NOT EXISTS shipment_lines (
     shipment_id      VARCHAR(20) NOT NULL REFERENCES shipments(shipment_id) ON DELETE CASCADE,
