@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DashboardConfig, UserProfile } from 'shared/types';
 import { LoginPage } from './components/auth/LoginPage';
 import { OnboardingFlow } from './components/onboarding/OnboardingFlow';
@@ -40,12 +40,15 @@ export default function App() {
   const [studioSeed, setStudioSeed] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  // Rehydrate the persisted user's dashboard config so reload lands them on their dashboard
-  // instead of restarting onboarding. The /dashboard/:userId endpoint wraps the config as
-  // {config: ...}; unwrap before setting state. 404 => no saved config => keep onboarding.
+  // Rehydrate the persisted user's dashboard config once per login so a browser refresh lands
+  // them on their dashboard instead of restarting onboarding. Gated by hydratedFor so it
+  // doesn't re-fire when the user clicks "New dashboard" (which intentionally nulls config) —
+  // without the gate, the effect would immediately re-fetch and bounce them back.
+  const hydratedFor = useRef<string | null>(null);
   useEffect(() => {
     if (!user) return;
-    if (config) return;
+    if (hydratedFor.current === user.email) return;
+    hydratedFor.current = user.email;
     let cancelled = false;
     (async () => {
       try {
@@ -66,7 +69,7 @@ export default function App() {
       }
     })();
     return () => { cancelled = true; };
-  }, [user, config]);
+  }, [user]);
 
   const userId = user?.email.toLowerCase() ?? '';
 
@@ -84,6 +87,7 @@ export default function App() {
 
   const handleLogout = () => {
     setUser(null);
+    hydratedFor.current = null;
     try { window.localStorage.removeItem(SESSION_USER_KEY); } catch { /* ignore */ }
     setConfig(null);
     setDashboardPhase('onboarding');
