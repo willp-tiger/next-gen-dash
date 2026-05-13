@@ -1,5 +1,71 @@
 # Session History
 
+## Session 2026-05-13: Chat-added tile fixes — drill-through + correct metric values
+
+**Goal:** User reported "a lot of bugs" on cards added via dashboard chat — drill-down not appearing, no click affordance, and "previous numbers are bugged." Reproduce with Playwright, fix, then sweep every chart type × KPI combination for regressions.
+
+**Completed Tasks:**
+
+### 1. Reproduction via Playwright
+
+Seeded a dashboard config directly through `PUT /api/dashboard/:userId` to skip the Claude onboarding round-trip, then drove the UI: opened the chat, asked "Break down OTIF by destination region," screenshotted, inspected each `.metric-card`'s computed `cursor` and `onClick` props via `page.evaluate`, then tried clicking each card and checking for the drawer.
+
+Bugs confirmed before any fix:
+- Chat-added breakdown card: `cursor=pointer hasOnClick=False reactClick=False` — clickable affordance with no handler, drawer never opened.
+- Breakdown bars displayed `1,449,967,260.6%`, `977,678,409.8%` etc. — i.e. shipment revenue in dollars rendered through `metric.unit = "percent"`.
+
+### 2. Click handler on breakdown / heatmap
+
+`Dashboard.tsx renderTile` passed `onClick={openDetail}` to every chart type *except* the `breakdown`/`heatmap` branch. One-line fix per branch; both tile components already accepted the prop.
+
+### 3. Categorical endpoint honors metricId
+
+`generateCategoricalSnapshot` always returned `SUM(s.total_value)` per dimension regardless of which metric was requested. Fixed by:
+- Exporting `PIVOT_DIM_SPECS` and `pivotValueExprFor` from `widgets.ts` (the same per-metric SQL expressions the pivot endpoint already uses).
+- Resolving the requested metric def in `generateCategoricalSnapshot` and using `pivotValueExprFor(def).valueExpr` for each dim query.
+- When no metric is supplied, fallback to `SUM(s.total_value)` so existing callers don't break.
+
+After the fix, "OTIF by Region" returns `LATAM 48.1% · NA 46.7% · APAC 44.5% · EMEA 44.3%` — sensible per-region OTIF rates anchoring to the headline 47.9%.
+
+### 4. abc_class and supplier_tier breakdowns
+
+Chat prompt advertised these two `breakdownBy` values but `CategoricalSnapshot.breakdowns` only carried `byCategory/byRegion/byWarehouse/bySegment`, and `BreakdownChart`'s dimension mapper silently fell through to `byCategory`. Extended the type with `byAbcClass + bySupplierTier`, added their queries in `generateCategoricalSnapshot` via `PIVOT_DIM_SPECS['abc_class' | 'supplier_tier']`, and wired both into `BreakdownChart`'s dim switch.
+
+### 5. Heatmap endpoint had the same metricId bug
+
+Surfaced during the broad-coverage pass — `OTIF heatmap (category × region)` rendered `$102.94M` per cell. Fix mirrored breakdown:
+- `generateHeatmapBreakdown` accepts optional `metricId`, resolves the def, uses `pivotValueExprFor` when supplied.
+- `/api/metrics/heatmap` reads the new query param; `getHeatmapBreakdown` client helper accepts it.
+- `HeatMapChart` passes `metric.id` (and added it to the fetch dep array) and replaced the hardcoded `formatAxis(val, 'dollars')` with `formatAxis(val, metric.unit || 'dollars')`.
+
+After fix the OTIF heatmap shows real percentages per cell (Bearings × NA = 45.8%, etc.), correctly direction-colored against `higher-is-better`.
+
+### 6. Broad-coverage Playwright sweep
+
+Seeded a single dashboard exercising every chart type against diverse KPI shapes:
+- Chart types: scorecard, number, line, bar, area, gauge, annotated_line, pivot, funnel, waterfall, top_n, bullet, calendar_heatmap, breakdown (×6 dims), heatmap, markdown.
+- KPIs covered: `otif_rate` (percent), `exception_rate` (percent), `avg_lead_time` (days), `inventory_turns` (turns), `excess_inventory_value` (dollars), `supplier_otd` (percent), `avg_exception_mttr` (hours).
+
+Results: **22/22 tiles rendered** without errors, **21/21 clickable tiles opened the drill drawer** (markdown intentionally not clickable), **0 console errors**. "vs prior" deltas formatted correctly across every unit type.
+
+**Technical Decisions:**
+
+- **Reuse pivot's per-metric SQL machinery, don't duplicate.** Both bugs (categorical + heatmap) had the same root cause — endpoints written before `pivotValueExprFor` existed never adopted it. Exporting two symbols beats writing a third metric-aware query function.
+- **Keep the legacy `SUM(s.total_value)` fallback.** Some callers (the canonical/standard view, the categorical endpoint when no metric is passed) genuinely want shipment-value breakdowns. Branch on `metricId` presence rather than forcing a metric.
+- **Heatmap cell formatter takes `metric.unit`.** Previously hardcoded `'dollars'` was an artifact of the always-revenue assumption. Once we honor the metric, the formatter has to follow.
+- **`PIVOT_DIM_SPECS` already had `abc_class` and `supplier_tier`** — extending the categorical breakdown was a matter of plumbing, not new SQL. The shared `PIVOT_DIM_SPECS` table is now the single source of truth for dim → SQL across pivot + categorical breakdown.
+
+**Issues Resolved:**
+
+- Chat-added breakdown/heatmap tiles had no click handler — `cursor: pointer` was a lie.
+- Categorical endpoint returned revenue regardless of metric, producing values like `1.4B%`.
+- Heatmap endpoint had the same flaw and additionally hardcoded the cell formatter to dollars.
+- `abc_class` / `supplier_tier` breakdowns silently fell back to byCategory.
+
+**Git:** Commit `efef5c7` pushed to origin/master.
+
+---
+
 ## Session 2026-05-12 (late evening): Role-fit scope decision + Manager/Director feature batch
 
 **Goal:** Evaluate the artifact against three enterprise personas (Director, Analyst, Manager), narrow the demo's target audience, and build the highest-impact features for the remaining personas.
