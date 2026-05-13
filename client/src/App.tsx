@@ -106,7 +106,6 @@ export default function App() {
         onTabChange={setActiveTab}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(c => !c)}
-        onboardingActive={dashboardPhase !== 'dashboard'}
       />
       <Header
         activeTab={activeTab}
