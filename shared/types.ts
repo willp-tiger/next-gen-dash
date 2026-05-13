@@ -173,7 +173,9 @@ export interface MetricValue {
 export interface InteractionEvent {
   userId: string;
   metricId: string;
-  action: 'view' | 'hover' | 'click' | 'expand';
+  /** 'mention' is server-logged when the user references a metric in dashboard chat — the
+   *  highest-fidelity intent signal we have, since it's natural-language and pre-action. */
+  action: 'view' | 'hover' | 'click' | 'expand' | 'mention';
   timestamp: string;
   durationMs?: number;
 }

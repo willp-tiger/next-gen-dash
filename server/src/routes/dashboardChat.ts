@@ -5,6 +5,8 @@ import { buildDashboardChatPrompt } from '../prompts/dashboardChat.js';
 import { getConfig, setConfig } from '../services/configStore.js';
 import { classifyLLMError } from '../services/llmErrors.js';
 import { getPublishedKpis } from '../services/kpiStore.js';
+import { buildChatSnapshot } from '../services/chatSnapshot.js';
+import { recordChatMentions } from './refinement.js';
 import type { DashboardConfig, MetricConfig } from '../../../shared/types.js';
 
 const router = Router();
@@ -63,7 +65,8 @@ router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) 
       return;
     }
 
-    // Build context about current dashboard
+    // Build context about current dashboard — config shape (for mutation intents) plus a grounded
+    // snapshot of current values + active annotations (for interpretation intents).
     const currentMetrics = config.metrics
       .filter(m => m.visible)
       .map(m => `- ${m.label} (${m.id}): ${m.chartType}, size=${m.size}, thresholds green=${m.thresholds.green.max} yellow=${m.thresholds.yellow.max} ${m.thresholds.direction}`)
@@ -74,7 +77,17 @@ router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) 
       ? `\n\nAdditional KPIs the user has authored in the Studio (also addable via "add" action):\n${published.map(k => `- ${k.displayName} (${k.kpiId}) — ${k.unit}, ${k.direction}. ${k.description}`).join('\n')}`
       : '';
 
-    const contextMessage = `Current dashboard metrics:\n${currentMetrics}${publishedSection}\n\nUser request: ${message}`;
+    // Grounded snapshot — current values, threshold status, recent trend, comparison, and
+    // active annotations intersecting the filter window. Failures are non-fatal; the chat
+    // still works for mutation intents without it.
+    let snapshotBlock = '';
+    try {
+      snapshotBlock = `\n\n${await buildChatSnapshot(config)}`;
+    } catch (snapErr) {
+      console.warn('buildChatSnapshot failed; continuing without grounded snapshot:', snapErr);
+    }
+
+    const contextMessage = `Current dashboard metrics (config shape):\n${currentMetrics}${publishedSection}${snapshotBlock}\n\nUser request: ${message}`;
 
     // Get or create chat history
     const history = chatHistories.get(userId) || [];
@@ -210,6 +223,15 @@ router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) 
         setConfig(userId, config);
         updatedConfig = config;
       }
+    }
+
+    // Record off-dashboard metric mentions for refinement signal. We use the post-action
+    // config snapshot so a metric the user just asked to ADD doesn't get flagged as "off
+    // dashboard" on its own turn. Only fires for non-add/non-author intents — those have
+    // already produced an action so a "want me to add it?" suggestion would be redundant.
+    if (action !== 'add' && action !== 'author') {
+      const currentIds = new Set((updatedConfig ?? config).metrics.map(m => m.id));
+      recordChatMentions(userId, message, currentIds);
     }
 
     res.json({
