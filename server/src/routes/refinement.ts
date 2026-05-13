@@ -49,6 +49,10 @@ router.get('/suggestions/:userId', async (req: Request<{ userId: string }>, res:
   const config = getConfig(userId);
 
   const dashboardMetricIds = new Set(config?.metrics.map((m: { id: string }) => m.id) || []);
+  const metricLabels = new Map<string, string>(
+    (config?.metrics ?? []).map((m: { id: string; label: string }) => [m.id, m.label]),
+  );
+  const labelFor = (id: string) => metricLabels.get(id) ?? id.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   const suggestions: RefinementSuggestion[] = [];
 
   // Count interactions per metric
@@ -59,15 +63,18 @@ router.get('/suggestions/:userId', async (req: Request<{ userId: string }>, res:
 
   const totalInteractions = log.length;
 
-  // Rule: if user clicked a non-dashboard metric more than 3 times, suggest adding it
+  // Rule: if user clicked a non-dashboard metric (e.g. via KPI Catalog) 2+ times, suggest
+  // adding it. NOTE: today, tile clicks only fire from the dashboard itself, so this rule
+  // currently fires only when KpiCatalog wires up logInteraction. Lowered threshold from 3
+  // → 2 so a brief demo session can plausibly trigger it once that wiring exists.
   for (const metricId of AVAILABLE_METRICS) {
-    if (!dashboardMetricIds.has(metricId) && (counts[metricId] || 0) > 3) {
+    if (!dashboardMetricIds.has(metricId) && (counts[metricId] || 0) >= 2) {
       suggestions.push({
         id: uuidv4(),
         userId,
         type: 'add_metric',
         metricId,
-        reason: `You have interacted with "${metricId}" ${counts[metricId]} times but it is not on your dashboard.`,
+        reason: `You've checked ${labelFor(metricId)} ${counts[metricId]} times but it's not on your dashboard yet. Want me to add it?`,
         suggestedChange: {
           id: metricId,
           visible: true,
@@ -78,8 +85,9 @@ router.get('/suggestions/:userId', async (req: Request<{ userId: string }>, res:
     }
   }
 
-  // Rule: if a dashboard metric was never interacted with after 10+ total interactions, suggest removing
-  if (totalInteractions >= 10) {
+  // Rule: if a dashboard metric was never interacted with after 5+ total interactions,
+  // suggest removing. Lowered from 10 → 5 so a demo session can surface this.
+  if (totalInteractions >= 5) {
     for (const metricId of dashboardMetricIds) {
       if (!counts[metricId] || counts[metricId] === 0) {
         suggestions.push({
@@ -87,7 +95,7 @@ router.get('/suggestions/:userId', async (req: Request<{ userId: string }>, res:
           userId,
           type: 'remove_metric',
           metricId,
-          reason: `"${metricId}" has had no interactions across ${totalInteractions} total events. Consider removing it to reduce clutter.`,
+          reason: `You haven't clicked into ${labelFor(metricId)} once across ${totalInteractions} interactions. Want me to hide it to reduce clutter?`,
           suggestedChange: {
             id: metricId,
             visible: false,

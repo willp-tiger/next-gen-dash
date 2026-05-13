@@ -1002,12 +1002,12 @@ const DRILL_SPECS: Record<string, DrillSpec> = {
     source: 'shipments',
     rowDescription: 'Shipments with any imperfection (late, partial, damaged, or returned)',
     columns: SHIPMENT_COLUMNS,
+    // Uses the materialized is_perfect_order flag — see migrate.ts ensurePerfectOrderFlag.
+    // The flag is TRUE only for shipments meeting all four conditions (on-time, in-full,
+    // no exception, not returned), so its negation captures every imperfection. Delivered-
+    // shipments only — undelivered ones don't have a definitive perfect/imperfect verdict.
     buildSql: (f) => shipmentDrillSql(
-      `(s.delivered_date IS NULL
-        OR s.delivered_date > s.promised_date
-        OR EXISTS (SELECT 1 FROM shipment_lines sl WHERE sl.shipment_id = s.shipment_id AND COALESCE(sl.qty_backordered,0) > 0)
-        OR EXISTS (SELECT 1 FROM exceptions e WHERE e.shipment_id = s.shipment_id)
-        OR EXISTS (SELECT 1 FROM returns r WHERE r.shipment_id = s.shipment_id))`,
+      `s.status = 'Delivered' AND s.is_perfect_order = FALSE`,
       f,
     ),
   },

@@ -93,6 +93,24 @@ export interface MetricConfig {
   markdown?: string;
   /** User-authored notes pinned to this tile. */
   notes?: TileNote[];
+  /** Optional alert rule: notify when the metric crosses a threshold. Demo-only — the rule
+   *  is persisted but never actually fires; the visible setup sells the "I can act on this"
+   *  story for Manager/Director personas. */
+  alertRule?: AlertRule;
+}
+
+export interface AlertRule {
+  id: string;
+  /** Direction of the comparison. */
+  operator: 'below' | 'above';
+  /** Threshold value the metric is compared against. Units match MetricConfig.unit. */
+  threshold: number;
+  /** Where alerts would route. None of these wire to a real delivery channel today. */
+  channel: 'email' | 'slack' | 'in_app';
+  /** Recipient identifier — email address, Slack channel id, etc. Free-text for the demo. */
+  recipient?: string;
+  enabled: boolean;
+  createdAt: string;
 }
 
 export interface TileNote {

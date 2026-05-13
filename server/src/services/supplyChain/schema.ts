@@ -96,13 +96,18 @@ export const SUPPLY_CHAIN_DDL: string[] = [
     status              VARCHAR(20) NOT NULL,
     origin_region       VARCHAR(20) NOT NULL,
     destination_region  VARCHAR(20) NOT NULL,
-    total_value         NUMERIC(12,2) NOT NULL
+    total_value         NUMERIC(12,2) NOT NULL,
+    -- Materialized perfect-order flag. Populated by a one-time backfill in migrate.ts to
+    -- avoid the three-EXISTS subquery on every perfect_order_rate read (was ~7s on Railway).
+    is_perfect_order    BOOLEAN NOT NULL DEFAULT FALSE
   )`,
   `CREATE INDEX IF NOT EXISTS idx_shp_order_date ON shipments(order_date)`,
   `CREATE INDEX IF NOT EXISTS idx_shp_destination ON shipments(destination_region)`,
   `CREATE INDEX IF NOT EXISTS idx_shp_status ON shipments(status)`,
   `CREATE INDEX IF NOT EXISTS idx_shp_customer ON shipments(customer_id)`,
   `CREATE INDEX IF NOT EXISTS idx_shp_warehouse ON shipments(warehouse_id)`,
+  // Partial index — we only ever aggregate WHERE is_perfect_order = TRUE.
+  `CREATE INDEX IF NOT EXISTS idx_shp_perfect ON shipments(is_perfect_order) WHERE is_perfect_order = TRUE`,
 
   `CREATE TABLE IF NOT EXISTS shipment_lines (
     shipment_id      VARCHAR(20) NOT NULL REFERENCES shipments(shipment_id) ON DELETE CASCADE,

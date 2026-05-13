@@ -70,6 +70,7 @@ export function ScorecardTile({ metric, value, userId, onClick }: ScorecardTileP
   const yPad = (yMax - yMin) * 0.08 || 1;
 
   const noteCount = metric.notes?.length ?? 0;
+  const hasAlert = !!metric.alertRule?.enabled;
 
   const handleClick = () => {
     if (userId) {
@@ -90,6 +91,16 @@ export function ScorecardTile({ metric, value, userId, onClick }: ScorecardTileP
               {metric.label}
             </span>
             <div className="flex items-center gap-1.5">
+              {hasAlert && (
+                <span
+                  title={`Alert set: ${metric.alertRule!.operator} ${metric.alertRule!.threshold}`}
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-50 text-blue-700 ring-1 ring-blue-200"
+                >
+                  <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+                  </svg>
+                </span>
+              )}
               {noteCount > 0 && (
                 <span
                   title={`${noteCount} pinned note${noteCount === 1 ? '' : 's'}`}

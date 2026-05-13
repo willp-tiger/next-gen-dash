@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
+  AlertRule,
   DrillSnapshot,
   FilterState,
   MetricConfig,
@@ -31,6 +32,8 @@ interface MetricDetailDrawerProps {
   noteAuthor?: string;
   onAddNote?: (metricId: string, body: string) => void;
   onRemoveNote?: (metricId: string, noteId: string) => void;
+  /** Persist (or clear) an alert rule for this metric. Pass null to remove the rule. */
+  onSetAlert?: (metricId: string, rule: AlertRule | null) => void;
   onClose: () => void;
 }
 
@@ -88,6 +91,7 @@ export function MetricDetailDrawer({
   noteAuthor,
   onAddNote,
   onRemoveNote,
+  onSetAlert,
   onClose,
 }: MetricDetailDrawerProps) {
   const status = value ? getHealthStatus(value.current, metric.thresholds) : null;
@@ -215,6 +219,41 @@ export function MetricDetailDrawer({
     if (!trimmed || !onAddNote) return;
     onAddNote(metric.id, trimmed);
     setNoteDraft('');
+  };
+
+  // Alert rule editor. Form state mirrors the persisted MetricConfig.alertRule but the user
+  // can stage edits without committing — save button writes through onSetAlert.
+  const existingAlert = metric.alertRule;
+  const [alertEditing, setAlertEditing] = useState(false);
+  const [alertOperator, setAlertOperator] = useState<'below' | 'above'>(
+    existingAlert?.operator ?? (direction === 'lower-is-better' ? 'above' : 'below'),
+  );
+  const [alertThreshold, setAlertThreshold] = useState<string>(
+    String(existingAlert?.threshold ?? (target > 0 ? target : 0)),
+  );
+  const [alertChannel, setAlertChannel] = useState<'email' | 'slack' | 'in_app'>(existingAlert?.channel ?? 'email');
+  const [alertRecipient, setAlertRecipient] = useState<string>(existingAlert?.recipient ?? '');
+
+  const saveAlert = () => {
+    if (!onSetAlert) return;
+    const t = Number(alertThreshold);
+    if (!Number.isFinite(t)) return;
+    onSetAlert(metric.id, {
+      id: existingAlert?.id ?? `alert-${Date.now()}`,
+      operator: alertOperator,
+      threshold: t,
+      channel: alertChannel,
+      recipient: alertRecipient.trim() || undefined,
+      enabled: true,
+      createdAt: existingAlert?.createdAt ?? new Date().toISOString(),
+    });
+    setAlertEditing(false);
+  };
+
+  const clearAlert = () => {
+    if (!onSetAlert) return;
+    onSetAlert(metric.id, null);
+    setAlertEditing(false);
   };
 
   const chips = activeFilterChips(filters);
@@ -395,6 +434,130 @@ export function MetricDetailDrawer({
                   </span>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Alert rule */}
+          {onSetAlert && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Alert
+                </h4>
+                {existingAlert && !alertEditing && (
+                  <span className="text-[10px] font-medium text-emerald-600">Active</span>
+                )}
+              </div>
+              {!alertEditing && existingAlert && (
+                <div className="rounded-lg border border-emerald-200/60 bg-emerald-50/40 px-4 py-3 flex items-center gap-3">
+                  <svg className="h-4 w-4 text-emerald-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                  </svg>
+                  <div className="flex-1 min-w-0 text-xs">
+                    <div className="font-semibold text-slate-900">
+                      Notify when {existingAlert.operator} {formatValue(existingAlert.threshold, metric.unit)}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">
+                      via {existingAlert.channel.replace('_', '-')}
+                      {existingAlert.recipient && ` → ${existingAlert.recipient}`}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setAlertEditing(true)}
+                    className="text-[11px] font-semibold text-accent-dark hover:underline"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={clearAlert}
+                    className="text-[11px] font-semibold text-slate-400 hover:text-red-600"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+              {!alertEditing && !existingAlert && (
+                <button
+                  onClick={() => setAlertEditing(true)}
+                  className="w-full rounded-lg border border-dashed border-slate-300 bg-white px-4 py-3 text-left text-xs font-medium text-slate-500 transition hover:border-accent hover:bg-accent/5 hover:text-accent-dark"
+                >
+                  + Set up an alert when this metric crosses a threshold
+                </button>
+              )}
+              {alertEditing && (
+                <div className="rounded-lg border border-slate-200/60 bg-slate-50/50 p-4 space-y-3">
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Demo only — rules persist but no alert actually fires.
+                  </p>
+                  <div className="grid grid-cols-[auto,1fr] gap-2 items-center">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Notify when</label>
+                    <div className="flex gap-2">
+                      <select
+                        value={alertOperator}
+                        onChange={e => setAlertOperator(e.target.value as 'below' | 'above')}
+                        className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs"
+                      >
+                        <option value="below">drops below</option>
+                        <option value="above">rises above</option>
+                      </select>
+                      <input
+                        type="number"
+                        value={alertThreshold}
+                        onChange={e => setAlertThreshold(e.target.value)}
+                        placeholder="threshold"
+                        className="flex-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs tabular-nums focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                      />
+                      <span className="self-center text-[10px] text-slate-400 whitespace-nowrap">{metric.unit || ''}</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-[auto,1fr] gap-2 items-center">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Send via</label>
+                    <div className="flex gap-1">
+                      {([
+                        { key: 'email' as const, label: 'Email' },
+                        { key: 'slack' as const, label: 'Slack' },
+                        { key: 'in_app' as const, label: 'In-app' },
+                      ]).map(opt => (
+                        <button
+                          key={opt.key}
+                          onClick={() => setAlertChannel(opt.key)}
+                          className={`flex-1 rounded-md px-2 py-1.5 text-[11px] font-semibold transition ${
+                            alertChannel === opt.key
+                              ? 'bg-navy-700 text-white'
+                              : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-[auto,1fr] gap-2 items-center">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">To</label>
+                    <input
+                      type="text"
+                      value={alertRecipient}
+                      onChange={e => setAlertRecipient(e.target.value)}
+                      placeholder={alertChannel === 'slack' ? '#ops-alerts' : alertChannel === 'email' ? 'you@example.com' : 'optional'}
+                      className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                    />
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      onClick={() => setAlertEditing(false)}
+                      className="rounded-md px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-200"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={saveAlert}
+                      className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-accent-dark"
+                    >
+                      Save alert
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

@@ -98,29 +98,17 @@ ORDER BY DATE_TRUNC('month', s.order_date)`,
   WHERE s.status = 'Delivered' AND s.order_date BETWEEN :start_date AND :end_date
 )
 SELECT AVG(is_perfect::numeric) * 100 AS value FROM evaluated`,
-    execSql: `WITH evaluated AS (
-  SELECT s.shipment_id,
-    CASE WHEN s.delivered_date <= s.promised_date
-              AND NOT EXISTS (SELECT 1 FROM shipment_lines sl WHERE sl.shipment_id = s.shipment_id AND sl.qty_backordered > 0)
-              AND NOT EXISTS (SELECT 1 FROM exceptions e WHERE e.shipment_id = s.shipment_id)
-              AND NOT EXISTS (SELECT 1 FROM returns r WHERE r.shipment_id = s.shipment_id)
-         THEN 1 ELSE 0 END AS is_perfect
-  FROM shipments s
-  WHERE s.status = 'Delivered'
-)
-SELECT AVG(is_perfect::numeric) * 100 AS value FROM evaluated`,
-    trendSql: `WITH evaluated AS (
-  SELECT DATE_TRUNC('month', s.order_date) AS month,
-    CASE WHEN s.delivered_date <= s.promised_date
-              AND NOT EXISTS (SELECT 1 FROM shipment_lines sl WHERE sl.shipment_id = s.shipment_id AND sl.qty_backordered > 0)
-              AND NOT EXISTS (SELECT 1 FROM exceptions e WHERE e.shipment_id = s.shipment_id)
-              AND NOT EXISTS (SELECT 1 FROM returns r WHERE r.shipment_id = s.shipment_id)
-         THEN 1 ELSE 0 END AS is_perfect
-  FROM shipments s
-  WHERE s.status = 'Delivered'
-)
-SELECT TO_CHAR(month, 'YYYY-MM') AS period, AVG(is_perfect::numeric) * 100 AS value
-FROM evaluated GROUP BY month ORDER BY month`,
+    // Materialized — see migrate.ts ensurePerfectOrderFlag. Reads the precomputed
+    // is_perfect_order flag instead of the three-EXISTS subquery, ~50x faster.
+    execSql: `SELECT 100.0 * AVG(CASE WHEN is_perfect_order THEN 1 ELSE 0 END) AS value
+FROM shipments
+WHERE status = 'Delivered'`,
+    trendSql: `SELECT TO_CHAR(DATE_TRUNC('month', order_date), 'YYYY-MM') AS period,
+       100.0 * AVG(CASE WHEN is_perfect_order THEN 1 ELSE 0 END) AS value
+FROM shipments
+WHERE status = 'Delivered'
+GROUP BY DATE_TRUNC('month', order_date)
+ORDER BY DATE_TRUNC('month', order_date)`,
     sourceTables: ['production.supply_chain.shipments', 'production.supply_chain.shipment_lines', 'production.supply_chain.exceptions', 'production.supply_chain.returns'],
     grain: 'monthly', dimensions: ['destination_region', 'warehouse_id', 'customer_segment'],
     materialization: 'scheduled', schedule: '0 2 * * *',

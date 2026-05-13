@@ -37,6 +37,17 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
     }
   }, [messages]);
 
+  // Toggle a body class while the chat is open so the dashboard layout can reserve right-side
+  // gutter space and stop placing hero KPI tiles behind the chat panel.
+  useEffect(() => {
+    const cls = isOpen ? (isExpanded ? 'chat-open chat-open--wide' : 'chat-open') : '';
+    document.body.classList.remove('chat-open', 'chat-open--wide');
+    if (cls) cls.split(' ').forEach(c => document.body.classList.add(c));
+    return () => {
+      document.body.classList.remove('chat-open', 'chat-open--wide');
+    };
+  }, [isOpen, isExpanded]);
+
   useEffect(() => {
     if (isOpen && !isLoading) {
       inputRef.current?.focus();
@@ -171,11 +182,12 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
         </div>
       )}
 
-      {/* Toggle button with persistent label */}
+      {/* Toggle button with persistent label. On phones the text label collapses to icon-only
+          to preserve thumb-zone real estate; the label re-emerges at sm:+ breakpoints. */}
       <button
         onClick={() => { setIsOpen(!isOpen); dismissTeaser(); }}
         className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-navy-700 text-white shadow-lg shadow-navy-700/25 transition-all duration-200 hover:bg-navy-800 hover:shadow-xl hover:shadow-navy-700/30 focus:outline-none focus:ring-2 focus:ring-accent/50 ${
-          isOpen ? 'h-14 w-14 justify-center' : 'h-14 pl-4 pr-5'
+          isOpen ? 'h-14 w-14 justify-center' : 'h-14 w-14 sm:w-auto sm:pl-4 sm:pr-5 justify-center'
         }`}
         title={isOpen ? 'Close chat' : 'Ask Claude to modify the dashboard'}
         aria-label={isOpen ? 'Close chat' : 'Open dashboard chat'}
@@ -189,7 +201,7 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
             <svg className="h-5 w-5 text-accent-light" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
             </svg>
-            <span className="text-sm font-semibold">Ask Claude</span>
+            <span className="hidden sm:inline text-sm font-semibold">Ask Claude</span>
           </>
         )}
       </button>

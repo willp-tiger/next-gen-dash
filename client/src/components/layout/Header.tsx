@@ -21,7 +21,7 @@ const TAB_LABELS: Record<AppTab, string> = {
 };
 
 const TAB_SUBTITLES: Record<AppTab, string> = {
-  dashboard: 'Real-time queue health metrics',
+  dashboard: 'Operational health across the supply chain',
   catalog: 'Browse and manage KPI definitions',
   studio: 'Author new KPIs with AI assistance',
   health: 'Monitor KPI data quality and freshness',

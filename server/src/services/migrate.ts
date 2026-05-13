@@ -10,13 +10,21 @@ import { seedKpiLibrary, SUPPLY_CHAIN_KPIS } from './supplyChain/seedKpis.js';
 // Each entry rewrites the runnable SQL for a KPI without bumping its version. Add a row
 // here when a KPI's execSql is wrong in the seed and we need every existing DB to pick
 // up the corrected version on next boot.
-const KPI_EXEC_SQL_FIXUPS: { kpiId: string; expected: string; replacement: string }[] = [
+const KPI_EXEC_SQL_FIXUPS: { kpiId: string; expected: string; replacement: string; replaceTrend?: boolean }[] = [
   {
     // inventory_turns must annualize so 30d / 7d / YTD windows show comparable values
     // against the (annualized) green threshold of 8.
     kpiId: 'inventory_turns',
     expected: 'WITH cogs AS',
     replacement: SUPPLY_CHAIN_KPIS.find(k => k.kpiId === 'inventory_turns')?.execSql ?? '',
+  },
+  {
+    // perfect_order_rate — replace the three-EXISTS subquery with the materialized
+    // is_perfect_order flag. ensurePerfectOrderFlag (in this file) populates the column.
+    kpiId: 'perfect_order_rate',
+    expected: 'WITH evaluated AS',
+    replacement: SUPPLY_CHAIN_KPIS.find(k => k.kpiId === 'perfect_order_rate')?.execSql ?? '',
+    replaceTrend: true,
   },
 ];
 
@@ -33,6 +41,15 @@ async function applyKpiFixups(): Promise<void> {
       `UPDATE kpi_definitions SET exec_sql = $1 WHERE kpi_id = $2`,
       [fix.replacement, fix.kpiId]
     );
+    if (fix.replaceTrend) {
+      const trendSql = SUPPLY_CHAIN_KPIS.find(k => k.kpiId === fix.kpiId)?.trendSql ?? '';
+      if (trendSql) {
+        await pool.query(
+          `UPDATE kpi_definitions SET trend_sql = $1 WHERE kpi_id = $2`,
+          [trendSql, fix.kpiId],
+        );
+      }
+    }
     console.log(`Applied execSql fixup for KPI: ${fix.kpiId}`);
   }
 }
@@ -156,5 +173,56 @@ export async function runMigrations(): Promise<void> {
   // 9. Apply idempotent fixups to KPI execSql for already-seeded DBs
   await applyKpiFixups();
 
+  // 10. Materialize is_perfect_order on shipments (one-time backfill on existing DBs).
+  await ensurePerfectOrderFlag();
+
   console.log('=== Migrations: complete ===');
+}
+
+// Tracks one-time migrations that go beyond schema DDL (column adds, data backfills).
+// Each migration name records that it has run; we skip if already applied.
+async function ensureMigrationsTable(): Promise<void> {
+  await pool.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
+    name        TEXT PRIMARY KEY,
+    applied_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+}
+
+async function migrationApplied(name: string): Promise<boolean> {
+  await ensureMigrationsTable();
+  const { rows } = await pool.query(`SELECT 1 FROM schema_migrations WHERE name = $1`, [name]);
+  return rows.length > 0;
+}
+
+async function markMigrationApplied(name: string): Promise<void> {
+  await ensureMigrationsTable();
+  await pool.query(
+    `INSERT INTO schema_migrations (name) VALUES ($1) ON CONFLICT DO NOTHING`,
+    [name],
+  );
+}
+
+// One-time migration: add is_perfect_order to shipments (idempotent ALTER for existing
+// DBs that pre-date the schema change), then backfill via the three-EXISTS computation.
+// The backfill is slow (≈10s on the demo dataset) but runs once; subsequent metric reads
+// become a simple AVG over the flag.
+async function ensurePerfectOrderFlag(): Promise<void> {
+  const MIGRATION = 'shipments_is_perfect_order_2026_05';
+  if (await migrationApplied(MIGRATION)) return;
+  console.log('Adding + backfilling shipments.is_perfect_order…');
+  await pool.query(`ALTER TABLE shipments ADD COLUMN IF NOT EXISTS is_perfect_order BOOLEAN NOT NULL DEFAULT FALSE`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_shp_perfect ON shipments(is_perfect_order) WHERE is_perfect_order = TRUE`);
+  const t0 = Date.now();
+  await pool.query(`
+    UPDATE shipments s
+    SET is_perfect_order = TRUE
+    WHERE s.status = 'Delivered'
+      AND s.delivered_date IS NOT NULL
+      AND s.delivered_date <= s.promised_date
+      AND NOT EXISTS (SELECT 1 FROM shipment_lines sl WHERE sl.shipment_id = s.shipment_id AND sl.qty_backordered > 0)
+      AND NOT EXISTS (SELECT 1 FROM exceptions e WHERE e.shipment_id = s.shipment_id)
+      AND NOT EXISTS (SELECT 1 FROM returns r WHERE r.shipment_id = s.shipment_id)
+  `);
+  await markMigrationApplied(MIGRATION);
+  console.log(`Backfilled is_perfect_order in ${((Date.now() - t0) / 1000).toFixed(1)}s.`);
 }

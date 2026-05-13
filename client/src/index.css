@@ -74,6 +74,50 @@
   }
 }
 
+/* Print stylesheet for "Export to PDF" via window.print(). Goal: flatten the dashboard into
+   a board-pack page — no chrome (sidebar, header, FAB, drawers, chat), one tile per row at
+   full width, black text, no shadows, and the .no-print escape hatch for elements that
+   should be hidden when printing. */
+@media print {
+  body {
+    background: white !important;
+  }
+  /* Hide all app chrome that isn't part of the dashboard surface itself. */
+  .no-print,
+  aside,
+  header,
+  nav,
+  button[title*="chat"i],
+  [role="dialog"] {
+    display: none !important;
+  }
+  /* Strip the sidebar's left-margin offset on main content. */
+  main {
+    margin-left: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  /* Tiles: avoid breaking across pages; full width; no shadows; preserve color via print-color. */
+  .metric-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* Don't lift cards on hover in print. */
+  .metric-card:hover {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  /* Don't render the ↗ hover hint. */
+  .metric-card.cursor-pointer::after {
+    content: '' !important;
+    display: none !important;
+  }
+}
+
 @layer components {
   .health-badge {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium;
@@ -95,13 +139,14 @@
     @apply shadow-md border-slate-300/60 -translate-y-0.5;
   }
 
-  /* Hover affordance for clickable tiles: a subtle ↗ glyph appears in the top-right corner
-     when the card is interactive. Targets tiles that opt-in via cursor-pointer. */
+  /* Hover/focus affordance for clickable tiles: a subtle ↗ glyph appears in the top-right
+     corner when the card is interactive. Targets tiles that opt-in via cursor-pointer. */
   .metric-card.cursor-pointer::after {
     content: '↗';
     @apply absolute top-2.5 right-3 text-slate-300 text-sm font-semibold opacity-0 transition-opacity duration-200 pointer-events-none;
   }
-  .metric-card.cursor-pointer:hover::after {
+  .metric-card.cursor-pointer:hover::after,
+  .metric-card.cursor-pointer:focus-within::after {
     @apply opacity-100 text-slate-500;
   }
 
@@ -119,5 +164,19 @@
   .section-divider::after {
     content: '';
     @apply flex-1 border-t border-slate-200;
+  }
+
+}
+
+/* Reserve right-side gutter when the dashboard chat panel is open so hero KPI tiles do not
+   render under the panel. Matches DashboardChat's fixed widths (400px / 640px expanded) plus
+   the right-6 gutter. Only kicks in at lg where the chat panel docks alongside content. */
+@media (min-width: 1024px) {
+  body.chat-open main {
+    padding-right: 432px;
+    transition: padding-right 0.3s;
+  }
+  body.chat-open--wide main {
+    padding-right: 672px;
   }
 }

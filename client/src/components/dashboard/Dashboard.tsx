@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type {
+  AlertRule,
   DashboardConfig,
   MetricsSnapshot,
   MetricConfig,
@@ -211,7 +212,36 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
     });
   };
 
+  // Undo for chat-driven mutations. When chat applies a config change, snapshot the prior
+  // state so the user can revert with one click. Auto-dismisses after 8s. Toast renders
+  // bottom-left to avoid colliding with the chat FAB in the bottom-right.
+  const [pendingUndo, setPendingUndo] = useState<{ prior: DashboardConfig; summary: string } | null>(null);
+  const undoTimer = useRef<number | null>(null);
+
+  const summarizeDiff = (prev: DashboardConfig, next: DashboardConfig): string => {
+    const prevIds = new Set(prev.metrics.filter(m => m.visible).map(m => m.id));
+    const nextIds = new Set(next.metrics.filter(m => m.visible).map(m => m.id));
+    const added = [...nextIds].filter(id => !prevIds.has(id));
+    const removed = [...prevIds].filter(id => !nextIds.has(id));
+    if (added.length === 1) {
+      const m = next.metrics.find(x => x.id === added[0]);
+      return m ? `Added “${m.label}”` : 'Tile added';
+    }
+    if (added.length > 1) return `${added.length} tiles added`;
+    if (removed.length === 1) {
+      const m = prev.metrics.find(x => x.id === removed[0]);
+      return m ? `Removed “${m.label}”` : 'Tile removed';
+    }
+    if (removed.length > 1) return `${removed.length} tiles removed`;
+    if (JSON.stringify(prev.globalFilters) !== JSON.stringify(next.globalFilters)) {
+      return 'Filters changed';
+    }
+    return 'Dashboard updated';
+  };
+
   const handleConfigUpdate = (newConfig: DashboardConfig) => {
+    const prior = activeConfig;
+    const summary = summarizeDiff(prior, newConfig);
     setActiveConfig(newConfig);
     if (newConfig.globalFilters !== undefined) {
       setFilters(newConfig.globalFilters || {});
@@ -225,6 +255,23 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
     }
     if (newConfig.metrics.some(m => m.chartType === 'breakdown' || m.chartType === 'heatmap')) {
       setShowFilters(true);
+    }
+    setPendingUndo({ prior, summary });
+    if (undoTimer.current) window.clearTimeout(undoTimer.current);
+    undoTimer.current = window.setTimeout(() => setPendingUndo(null), 8000);
+  };
+
+  const handleUndo = () => {
+    if (!pendingUndo) return;
+    const prior = pendingUndo.prior;
+    setActiveConfig(prior);
+    setFilters(prior.globalFilters || {});
+    setPendingUndo(null);
+    if (undoTimer.current) window.clearTimeout(undoTimer.current);
+    // Persist the rollback. If it fails, the UI state is still correct; next snapshot will
+    // re-render against the prior config.
+    if (!isCanonical && !activePersona) {
+      updateDashboardConfig(userId, { ...prior, updatedAt: new Date().toISOString() }).catch(() => {});
     }
   };
 
@@ -264,6 +311,71 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
     persistConfig(next);
   };
 
+  const setAlert = (metricId: string, rule: AlertRule | null) => {
+    const next: DashboardConfig = {
+      ...activeConfig,
+      metrics: activeConfig.metrics.map(m =>
+        m.id === metricId ? { ...m, alertRule: rule ?? undefined } : m
+      ),
+    };
+    persistConfig(next);
+  };
+
+  // === Reorder + resize ===
+  // Drag-and-drop reorder uses native HTML5 drag events. Tile wrappers in the All Metrics
+  // tab are draggable; drop swaps the two metrics' positions. The Overview tab is not
+  // draggable — its layout is derived (hero row, compact row) rather than persisted.
+  const [dragMetricId, setDragMetricId] = useState<string | null>(null);
+  const [dragOverMetricId, setDragOverMetricId] = useState<string | null>(null);
+
+  const swapPositions = (aId: string, bId: string) => {
+    if (aId === bId) return;
+    const list = activeConfig.metrics;
+    const a = list.find(m => m.id === aId);
+    const b = list.find(m => m.id === bId);
+    if (!a || !b) return;
+    const aPos = a.position;
+    const bPos = b.position;
+    const next: DashboardConfig = {
+      ...activeConfig,
+      metrics: list.map(m => {
+        if (m.id === aId) return { ...m, position: bPos };
+        if (m.id === bId) return { ...m, position: aPos };
+        return m;
+      }),
+    };
+    persistConfig(next);
+  };
+
+  const cycleSize = (metricId: string) => {
+    const order = ['sm', 'md', 'lg'] as const;
+    const next: DashboardConfig = {
+      ...activeConfig,
+      metrics: activeConfig.metrics.map(m => {
+        if (m.id !== metricId) return m;
+        const idx = order.indexOf(m.size as 'sm' | 'md' | 'lg');
+        const nextSize = order[(idx + 1) % order.length];
+        return { ...m, size: nextSize };
+      }),
+    };
+    persistConfig(next);
+  };
+
+  const hideMetric = (metricId: string) => {
+    const next: DashboardConfig = {
+      ...activeConfig,
+      metrics: activeConfig.metrics.map(m =>
+        m.id === metricId ? { ...m, visible: false } : m
+      ),
+    };
+    persistConfig(next);
+  };
+
+  const colSpanFor = (size: 'sm' | 'md' | 'lg', cols: number): string => {
+    if (size === 'lg') return cols >= 3 ? 'sm:col-span-2 lg:col-span-2' : 'sm:col-span-2';
+    return '';
+  };
+
   const applyGlobalFilters = (metric: MetricConfig): MetricConfig => {
     if (metric.chartType === 'breakdown' || metric.chartType === 'heatmap') {
       return { ...metric, filterBy: { ...metric.filterBy, ...filters } };
@@ -297,10 +409,14 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
     return parts.join('|');
   };
 
-  // Unified tile dispatch: takes a metric and renders the right widget.
+  // Unified tile dispatch: takes a metric and renders the right widget. Two categories:
+  // - Self-fetching widgets read their own data from /api/widgets/* (no snapshot dependency).
+  // - Snapshot-backed widgets read from MetricsSnapshot.metrics[id] and fall back to
+  //   EmptyMetricTile when the value isn't loaded yet.
   const renderTile = (metric: MetricConfig) => {
     const openDetail = () => setSelectedMetric(metric.id);
 
+    // Markdown is special: pure layout, no data, may span columns.
     if (metric.chartType === 'markdown') {
       return (
         <div className="metric-card p-5 col-span-1 lg:col-span-2 prose prose-sm max-w-none">
@@ -310,54 +426,118 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
       );
     }
 
-    if (metric.chartType === 'annotated_line') {
-      return <AnnotatedLineTile metric={metric} filters={filters} onClick={openDetail} />;
-    }
+    // Self-fetching widgets — render directly without checking snapshot. Each component
+    // owns its /api/widgets/* call.
+    const selfFetching: Partial<Record<MetricConfig['chartType'], React.ReactNode>> = {
+      annotated_line: <AnnotatedLineTile metric={metric} filters={filters} onClick={openDetail} />,
+      pivot: <PivotTile metric={metric} filters={filters} onClick={openDetail} />,
+      funnel: <FunnelTile metric={metric} filters={filters} onClick={openDetail} />,
+      waterfall: <WaterfallTile metric={metric} filters={filters} onClick={openDetail} />,
+      top_n: <TopNTile metric={metric} filters={filters} onClick={openDetail} />,
+      bullet: <BulletTile metric={metric} filters={filters} onClick={openDetail} />,
+      calendar_heatmap: <CalendarHeatmapTile metric={metric} filters={filters} onClick={openDetail} />,
+    };
+    const selfFetched = selfFetching[metric.chartType];
+    if (selfFetched) return selfFetched;
 
-    if (metric.chartType === 'pivot') {
-      return <PivotTile metric={metric} filters={filters} onClick={openDetail} />;
-    }
-
-    if (metric.chartType === 'funnel') {
-      return <FunnelTile metric={metric} filters={filters} onClick={openDetail} />;
-    }
-
-    if (metric.chartType === 'waterfall') {
-      return <WaterfallTile metric={metric} filters={filters} onClick={openDetail} />;
-    }
-
-    if (metric.chartType === 'top_n') {
-      return <TopNTile metric={metric} filters={filters} onClick={openDetail} />;
-    }
-
-    if (metric.chartType === 'bullet') {
-      return <BulletTile metric={metric} filters={filters} onClick={openDetail} />;
-    }
-
-    if (metric.chartType === 'calendar_heatmap') {
-      return <CalendarHeatmapTile metric={metric} filters={filters} onClick={openDetail} />;
-    }
-
+    // Breakdown / heatmap — categorical, applies global filters before render.
     if (metric.chartType === 'breakdown' || metric.chartType === 'heatmap') {
       const filtered = applyGlobalFilters(metric);
-      if (metric.chartType === 'heatmap') return <HeatMapChart metric={filtered} onClick={openDetail} />;
-      return <BreakdownChart metric={filtered} onClick={openDetail} />;
+      return metric.chartType === 'heatmap'
+        ? <HeatMapChart metric={filtered} onClick={openDetail} />
+        : <BreakdownChart metric={filtered} onClick={openDetail} />;
     }
 
-    // Snapshot-backed tiles
+    // Snapshot-backed tiles — gauge / scorecard / line / bar / area / number.
     const val = snapshot?.metrics[metric.id];
     if (!val) return <EmptyMetricTile metric={metric} onClick={openDetail} />;
 
-    if (metric.chartType === 'gauge') {
-      return <GaugeTile metric={metric} value={val} userId={userId} onClick={openDetail} />;
-    }
-    if (metric.chartType === 'scorecard') {
-      return <ScorecardTile metric={metric} value={val} userId={userId} onClick={openDetail} />;
-    }
-    if (metric.chartType === 'line' || metric.chartType === 'bar' || metric.chartType === 'area') {
-      return <ChartTile metric={metric} value={val} userId={userId} onClick={openDetail} />;
-    }
-    return <MetricTile metric={metric} value={val} userId={userId} onClick={openDetail} />;
+    const snapshotTiles: Partial<Record<MetricConfig['chartType'], React.ReactNode>> = {
+      gauge: <GaugeTile metric={metric} value={val} userId={userId} onClick={openDetail} />,
+      scorecard: <ScorecardTile metric={metric} value={val} userId={userId} onClick={openDetail} />,
+      line: <ChartTile metric={metric} value={val} userId={userId} onClick={openDetail} />,
+      bar: <ChartTile metric={metric} value={val} userId={userId} onClick={openDetail} />,
+      area: <ChartTile metric={metric} value={val} userId={userId} onClick={openDetail} />,
+    };
+    return snapshotTiles[metric.chartType] ?? <MetricTile metric={metric} value={val} userId={userId} onClick={openDetail} />;
+  };
+
+  // Tile wrapper used in the All Metrics tab. Adds drag-to-reorder, size cycling, hide,
+  // and a col-span based on metric.size. Markdown tiles set their own col-span so we skip
+  // the wrapper-applied span for them.
+  const renderTileWrapped = (metric: MetricConfig, sectionCols: number) => {
+    const animClass = animatedIds.has(metric.id) ? 'animate-tile-enter' : '';
+    const spanClass = metric.chartType === 'markdown' ? '' : colSpanFor(metric.size, sectionCols);
+    const isDragging = dragMetricId === metric.id;
+    const isDragTarget = dragOverMetricId === metric.id && dragMetricId && dragMetricId !== metric.id;
+    return (
+      <div
+        key={tileKey(metric)}
+        draggable
+        onDragStart={(e) => {
+          setDragMetricId(metric.id);
+          e.dataTransfer.effectAllowed = 'move';
+          // Required for Firefox compatibility.
+          try { e.dataTransfer.setData('text/plain', metric.id); } catch { /* ignore */ }
+        }}
+        onDragOver={(e) => {
+          if (!dragMetricId || dragMetricId === metric.id) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          if (dragOverMetricId !== metric.id) setDragOverMetricId(metric.id);
+        }}
+        onDragLeave={() => {
+          if (dragOverMetricId === metric.id) setDragOverMetricId(null);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          if (dragMetricId && dragMetricId !== metric.id) {
+            swapPositions(dragMetricId, metric.id);
+          }
+          setDragMetricId(null);
+          setDragOverMetricId(null);
+        }}
+        onDragEnd={() => {
+          setDragMetricId(null);
+          setDragOverMetricId(null);
+        }}
+        className={`group/wrap relative ${spanClass} ${animClass} ${isDragging ? 'opacity-40' : ''} ${
+          isDragTarget ? 'ring-2 ring-accent ring-offset-2 rounded-xl' : ''
+        } transition`}
+      >
+        {/* Tile action overlay — appears on hover, lets the user resize, hide, or grab the
+            drag handle. Hidden in print. */}
+        <div className="no-print pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between px-3 pt-3 opacity-0 group-hover/wrap:opacity-100 transition-opacity">
+          <span
+            className="pointer-events-auto cursor-grab active:cursor-grabbing rounded-md bg-white/90 px-1.5 py-1 text-[10px] font-bold text-slate-400 shadow-sm ring-1 ring-slate-200 select-none"
+            title="Drag to reorder"
+          >
+            ⋮⋮
+          </span>
+          <div className="pointer-events-auto flex items-center gap-1">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); cycleSize(metric.id); }}
+              className="rounded-md bg-white/90 px-1.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 shadow-sm ring-1 ring-slate-200 hover:bg-white hover:text-slate-700"
+              title={`Resize (currently ${metric.size})`}
+            >
+              {metric.size}
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); hideMetric(metric.id); }}
+              className="rounded-md bg-white/90 px-1.5 py-1 text-slate-400 shadow-sm ring-1 ring-slate-200 hover:bg-white hover:text-red-600"
+              title="Hide from dashboard"
+            >
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        {renderTile(metric)}
+      </div>
+    );
   };
 
   const refreshAgo = () => {
@@ -395,9 +575,9 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
       {/* Dashboard header */}
       <div className="rounded-xl bg-white border border-slate-200/60 shadow-sm">
         <div className="p-5">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 flex-wrap">
                 <h2 className="text-xl font-bold tracking-tight text-slate-900">
                   {activePersona
                     ? `${activePersona.charAt(0).toUpperCase() + activePersona.slice(1)} View`
@@ -465,7 +645,7 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-2 ml-4">
+            <div className="no-print flex items-center gap-2 flex-wrap sm:flex-nowrap sm:ml-4">
               <button
                 onClick={() => setShowThresholds(true)}
                 className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:border-slate-300"
@@ -476,9 +656,19 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
                 </svg>
                 Thresholds
               </button>
-              {/* Visual separator between settings (thresholds) and view-switch controls
-                  (persona / standard). Three pill buttons of equal weight in a row read as
-                  one cluster otherwise. */}
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:border-slate-300"
+                title="Print or save as PDF for a board pack"
+              >
+                <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
+                </svg>
+                Export
+              </button>
+              {/* Visual separator between settings (thresholds / export) and view-switch
+                  controls (persona / standard). Three pill buttons of equal weight in a row
+                  read as one cluster otherwise. */}
               <div className="h-6 w-px bg-slate-200" />
               <PersonaSelector onSelect={handlePersonaSelect} activePersona={activePersona} />
               {activeConfig.layout?.showCanonicalToggle !== false && (
@@ -489,7 +679,7 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
         </div>
 
         {/* Tab navigation */}
-        <div className="flex gap-1 px-5 border-t border-slate-100">
+        <div className="no-print flex gap-1 px-5 border-t border-slate-100">
           {([
             { key: 'overview' as const, label: 'Executive Summary', icon: 'M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z' },
             { key: 'metrics' as const, label: 'All Metrics', icon: 'M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z' },
@@ -514,11 +704,15 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
 
       {/* Filter bar */}
       {showFilters && (
-        <FilterBar filters={filters} onFilterChange={handleFilterChange} />
+        <div className="no-print">
+          <FilterBar filters={filters} onFilterChange={handleFilterChange} />
+        </div>
       )}
 
       {/* Refinement banner */}
-      <RefinementBanner userId={userId} onAccept={handleAcceptSuggestion} />
+      <div className="no-print">
+        <RefinementBanner userId={userId} onAccept={handleAcceptSuggestion} />
+      </div>
 
       {/* Loading state */}
       {loading && !snapshot && (
@@ -535,7 +729,7 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
             {topKpis.slice(0, 4).map(metric => {
               const val = snapshot.metrics[metric.id];
               if (!val) {
-                return <EmptyMetricTile key={metric.id} metric={metric} onClick={() => setSelectedMetric(metric.id)} />;
+                return <EmptyMetricTile key={tileKey(metric)} metric={metric} onClick={() => setSelectedMetric(metric.id)} />;
               }
               const status = getHealthStatus(val.current, metric.thresholds);
               const borderColor = status === 'healthy' ? 'border-l-emerald-500' : status === 'warning' ? 'border-l-amber-500' : 'border-l-red-500';
@@ -544,7 +738,7 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
 
               return (
                 <div
-                  key={metric.id}
+                  key={tileKey(metric)}
                   className={`metric-card p-5 border-l-4 ${borderColor} cursor-pointer`}
                   onClick={() => setSelectedMetric(metric.id)}
                   role="button"
@@ -579,7 +773,7 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
                 if (!val) {
                   return (
                     <div
-                      key={metric.id}
+                      key={tileKey(metric)}
                       className="metric-card p-4 cursor-pointer text-center"
                       onClick={() => setSelectedMetric(metric.id)}
                     >
@@ -596,7 +790,7 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
 
                 return (
                   <div
-                    key={metric.id}
+                    key={tileKey(metric)}
                     className="metric-card p-4 cursor-pointer text-center"
                     onClick={() => setSelectedMetric(metric.id)}
                     role="button"
@@ -654,14 +848,7 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
                     )}
                   </div>
                   <div className={sectionGridClass}>
-                    {sectionMetrics.map(metric => {
-                      const animClass = animatedIds.has(metric.id) ? 'animate-tile-enter' : '';
-                      return (
-                        <div key={tileKey(metric)} className={animClass}>
-                          {renderTile(metric)}
-                        </div>
-                      );
-                    })}
+                    {sectionMetrics.map(metric => renderTileWrapped(metric, sectionCols))}
                   </div>
                 </div>
               );
@@ -670,14 +857,7 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
             <>
               {standardMetrics.length > 0 && (
                 <div className={gridClass}>
-                  {standardMetrics.map((metric) => {
-                    const animClass = animatedIds.has(metric.id) ? 'animate-tile-enter' : '';
-                    return (
-                      <div key={tileKey(metric)} className={animClass}>
-                        {renderTile(metric)}
-                      </div>
-                    );
-                  })}
+                  {standardMetrics.map((metric) => renderTileWrapped(metric, cols))}
                 </div>
               )}
 
@@ -687,11 +867,7 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
                     <h3>Breakdowns</h3>
                   </div>
                   <div className={gridClass}>
-                    {breakdownMetrics.map((metric) => (
-                      <div key={tileKey(metric)}>
-                        {renderTile(metric)}
-                      </div>
-                    ))}
+                    {breakdownMetrics.map((metric) => renderTileWrapped(metric, cols))}
                   </div>
                 </div>
               )}
@@ -701,11 +877,44 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
       )}
 
       {/* Dashboard chat */}
-      <DashboardChat
-        userId={userId}
-        onConfigUpdate={handleConfigUpdate}
-        onAuthorKpi={onAuthorKpi}
-      />
+      <div className="no-print">
+        <DashboardChat
+          userId={userId}
+          onConfigUpdate={handleConfigUpdate}
+          onAuthorKpi={onAuthorKpi}
+        />
+      </div>
+
+      {/* Undo toast — bottom-left so the chat FAB (bottom-right) stays clear. */}
+      {pendingUndo && (
+        <div
+          className="no-print fixed bottom-6 left-6 z-50 animate-slide-in"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-3 rounded-2xl bg-slate-900 px-4 py-2.5 text-white shadow-xl shadow-slate-900/30 ring-1 ring-white/10">
+            <svg className="h-4 w-4 text-accent-light flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-xs font-medium">{pendingUndo.summary}</span>
+            <button
+              onClick={handleUndo}
+              className="rounded-md px-2 py-1 text-xs font-bold text-accent-light hover:bg-white/10 transition"
+            >
+              Undo
+            </button>
+            <button
+              onClick={() => { if (undoTimer.current) window.clearTimeout(undoTimer.current); setPendingUndo(null); }}
+              className="text-slate-400 hover:text-white transition"
+              aria-label="Dismiss"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Threshold settings drawer */}
       {showThresholds && snapshot && (
@@ -732,6 +941,7 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
             noteAuthor={userName}
             onAddNote={addNote}
             onRemoveNote={removeNote}
+            onSetAlert={setAlert}
             onClose={() => setSelectedMetric(null)}
           />
         );

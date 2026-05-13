@@ -6,6 +6,9 @@ interface SidebarProps {
   onTabChange: (tab: AppTab) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  /** True while the user has not yet built their first dashboard. Catalog/Studio/Health are
+   *  disabled in that state — clicking them would land in an empty Studio with no context. */
+  onboardingActive?: boolean;
 }
 
 const NAV_ITEMS: { key: AppTab; label: string; icon: string }[] = [
@@ -31,7 +34,7 @@ const NAV_ITEMS: { key: AppTab; label: string; icon: string }[] = [
   },
 ];
 
-export function Sidebar({ activeTab, onTabChange, collapsed, onToggleCollapse }: SidebarProps) {
+export function Sidebar({ activeTab, onTabChange, collapsed, onToggleCollapse, onboardingActive }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navContent = (
@@ -58,19 +61,29 @@ export function Sidebar({ activeTab, onTabChange, collapsed, onToggleCollapse }:
         </p>
         {NAV_ITEMS.map(item => {
           const isActive = activeTab === item.key;
+          const disabled = onboardingActive === true && item.key !== 'dashboard';
+          const titleAttr = collapsed
+            ? item.label
+            : disabled
+              ? `${item.label} — available after you build your dashboard`
+              : undefined;
           return (
             <button
               key={item.key}
+              disabled={disabled}
               onClick={() => {
+                if (disabled) return;
                 onTabChange(item.key);
                 setMobileOpen(false);
               }}
               className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
                 isActive
                   ? 'bg-accent/15 text-accent-light'
-                  : 'text-navy-200 hover:bg-white/5 hover:text-white'
+                  : disabled
+                    ? 'text-navy-400 cursor-not-allowed opacity-50'
+                    : 'text-navy-200 hover:bg-white/5 hover:text-white'
               }`}
-              title={collapsed ? item.label : undefined}
+              title={titleAttr}
             >
               <svg
                 className={`h-[18px] w-[18px] flex-shrink-0 ${isActive ? 'text-accent-light' : 'text-navy-300 group-hover:text-white'}`}
