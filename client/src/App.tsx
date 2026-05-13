@@ -41,20 +41,31 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Rehydrate the persisted user's dashboard config so reload lands them on their dashboard
-  // instead of restarting onboarding. If config fetch fails, fall back to onboarding cleanly.
+  // instead of restarting onboarding. The /dashboard/:userId endpoint wraps the config as
+  // {config: ...}; unwrap before setting state. 404 => no saved config => keep onboarding.
   useEffect(() => {
     if (!user) return;
     if (config) return;
-    getDashboardConfig(user.email.toLowerCase())
-      .then(saved => {
-        if (saved) {
+    let cancelled = false;
+    (async () => {
+      try {
+        const wrapped = await getDashboardConfig(user.email.toLowerCase()) as unknown as
+          { config?: DashboardConfig } | DashboardConfig | null;
+        if (cancelled) return;
+        const saved: DashboardConfig | null = wrapped && typeof wrapped === 'object' && 'config' in (wrapped as object)
+          ? ((wrapped as { config?: DashboardConfig }).config ?? null)
+          : (wrapped as DashboardConfig | null);
+        if (saved && saved.metrics) {
           setConfig(saved);
           setDashboardPhase('dashboard');
         } else {
           setDashboardPhase('onboarding');
         }
-      })
-      .catch(() => setDashboardPhase('onboarding'));
+      } catch {
+        if (!cancelled) setDashboardPhase('onboarding');
+      }
+    })();
+    return () => { cancelled = true; };
   }, [user, config]);
 
   const userId = user?.email.toLowerCase() ?? '';

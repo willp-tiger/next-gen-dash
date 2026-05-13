@@ -1,5 +1,53 @@
 # Session History
 
+## Session 2026-05-13 (later): Workflow walkthrough — UX evaluation + session-persistence fix
+
+**Goal:** Run an end-to-end Playwright walkthrough across Manager + Director user workflows (login → onboarding → interpretation → dashboard → chat-add → drill drawer → notes → filters → standard view → persona switch → KPI Catalog/Studio), capture per-step screenshots, evaluate UX/UI, and fix the highest-severity findings.
+
+**Completed Tasks:**
+
+### 1. Wrote `scripts/workflow-walkthrough.py`
+
+Self-contained Playwright walkthrough covering 17 steps. Registers a fresh user, drives Build-with-AI onboarding through to the dashboard, exercises drill drawer + note pinning, reloads to check session+note persistence, applies filters, toggles Standard View, switches persona, navigates to KPI Catalog and Studio. Each step screenshots into `scripts/_inspect_out/workflow-NN-*.png` and writes findings to `workflow-report.json`.
+
+### 2. First-run findings + how they resolved
+
+Five candidate findings surfaced in the first walkthrough. After investigation, only one was a genuine new fix — the other four were already addressed in commit `6bd182e` (review-round-2) which had landed before the walkthrough started. Verifying that those four were actually in place was the practical value of this pass.
+
+| # | Finding | Resolution |
+|---|---|---|
+| F1 | Reload kicked user to login — no session persistence | **Fixed this session** in `client/src/App.tsx`: persist `user` to `localStorage` on login, rehydrate on App mount, unwrap `{config: …}` from `GET /api/dashboard/:userId`. |
+| F2 | Suspected duplicate React keys on Executive Summary hero rows | Already resolved in `6bd182e`: hero / compact / All Metrics rows already use `tileKey(metric)`. Residual `Encountered two children with the same key` warning during chat-add comes from a different cause — see "Newly surfaced" below. |
+| F3 | Chat panel occluded 4th hero KPI | Already resolved in `6bd182e`: `DashboardChat` toggles `body.chat-open[--wide]`; `index.css` reserves 432 / 672 px right gutter at `lg+`. Walkthrough confirmed hero tiles now reflow left of the open chat. |
+| F4 | Stale "Real-time queue health metrics" tagline | Already resolved in `6bd182e`: dashboard subtitle is "Operational health across the supply chain". |
+| F5 | Sidebar nav items clickable during onboarding | Already resolved in `6bd182e`: `Sidebar` accepts `onboardingActive` and dims/disables non-Dashboard items. Walkthrough confirmed in `workflow-03-onboarding-picker.png`. |
+
+### 3. DB repair (Railway)
+
+Server crashed on startup with `column "is_perfect_order" does not exist`. The Railway DB had the column missing on `shipments` and no `schema_migrations` table. Restored via direct `ALTER TABLE`; on next start, the server's idempotent backfill ran cleanly (1.1s, ~22k rows updated).
+
+### 4. Verified by re-run
+
+All 17 steps now produce screenshots without page-level errors. Key verifications:
+- Pinning a note on the OTIF scorecard, reloading, reopening the drawer — note is still there, attributed to the logged-in user. (F1 working end-to-end.)
+- Chat-open layout: hero KPI tiles reflow left of the chat panel; no occlusion. (F3 confirmed in place.)
+- Standard View / Compare Personas / KPI Catalog / KPI Studio nav all reach their target views.
+- Filter chips (Region: APAC × ; 7d preset) apply globally + visible across persona switches.
+
+### 5. Newly surfaced (not fixed, queued)
+
+- **P2: Executive Summary is empty for canonical / warehouse-director / procurement-lead views.** Those configs have no `number`/`scorecard` tiles, so `topKpis` is empty and the tab shows only a "See all N metrics" CTA. Either auto-promote a few tiles, or render an explicit "Switch to All Metrics" pointer.
+- **P2: Chat-add can produce semantically-identical tiles** (same `id+chartType+position`). Console showed `metricIds=otif_rate,inventory_turns,inventory_turns,exception_rate` and a `key=inventory_turns` collision after a chat-add sequence. `tileKey()` is doing its job for distinct positions; the root cause is `dashboardChat` not de-duping before persisting.
+
+**Files touched (committed this session):**
+- `client/src/App.tsx` — session persistence + config rehydration
+- `scripts/workflow-walkthrough.py` — new
+- `docs/SESSION_STATUS.md`, `docs/SESSION_HISTORY.md` — this update
+
+**Git Commit:** (this session) — see `git log -1`
+
+---
+
 ## Session 2026-05-13: Chat-added tile fixes — drill-through + correct metric values
 
 **Goal:** User reported "a lot of bugs" on cards added via dashboard chat — drill-down not appearing, no click affordance, and "previous numbers are bugged." Reproduce with Playwright, fix, then sweep every chart type × KPI combination for regressions.

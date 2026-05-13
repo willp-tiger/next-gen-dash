@@ -3,8 +3,8 @@
 ## Current State
 
 **Project**: Meridian Industrial Supply demo (B2B industrial parts distributor)
-**Phase**: Manager + Director feature pass — chat-tile correctness fixed; Phase 5 showcase still queued
-**Last Commit**: `efef5c7` (pushed to origin/master) — chat-added breakdown/heatmap tiles: drill-through + correct metric values
+**Phase**: Manager + Director feature pass — workflow walkthrough pass complete; Phase 5 showcase still queued
+**Last Commit**: (this session) — workflow walkthrough + 5 UX fixes (session persistence, key collisions, chat overlap, stale tagline, onboarding sidebar)
 **Demo Pitch**: democratization of dashboard authoring for non-technical business users. The artifact must work as a Manager/Director surface for *acting on* what they see — drilling into detail, pinning context, comparing to commitments — not just looking at headline tiles.
 
 ## Target Users — Scope of Record
@@ -17,7 +17,20 @@ The demo targets **Manager and above only**. Analyst is explicitly out of scope.
 
 **Out of scope for the demo** (would matter for a v1 product, not for the walkthrough): real ERP/WMS/TMS data connectors, SSO/RBAC, scheduled email/Slack delivery.
 
-## Most Recent Completed Work — Session 2026-05-13
+## Most Recent Completed Work — Session 2026-05-13 (later)
+
+**Workflow walkthrough pass.** Ran a Playwright walkthrough across the full Manager+Director journey (login → onboarding → interpretation → dashboard → chat-add → drill drawer + notes → filters → standard view → persona switch → KPI Catalog/Studio), screenshotted each step, and shipped one P0 fix. Four other walkthrough findings turned out to be already resolved in commit `6bd182e` (review-round-2) — the value of this pass was verifying them and writing a reusable harness. Detailed log in `SESSION_HISTORY.md`.
+
+- **F1 — Session persistence (P0, fixed this session):** `client/src/App.tsx` now stores `user` in `localStorage` and rehydrates the dashboard config (`{config: …}` unwrap) on mount. Reload no longer kicks the user to login; pinned notes survive `F5`. This was the only genuine new code change.
+- **F2–F5 — already in `6bd182e`:** duplicate-key suppression via `tileKey()`, chat-panel gutter reflow via `body.chat-open`, new dashboard tagline, sidebar-disabled-during-onboarding. Walkthrough confirmed each is working.
+
+**`scripts/workflow-walkthrough.py` (new).** Reusable Playwright harness — 17 steps, per-step screenshots into `scripts/_inspect_out/workflow-*.png`, machine-readable findings in `workflow-report.json`. Run with `python scripts/workflow-walkthrough.py` against `npm run dev`.
+
+**DB repair side-effect.** The Railway DB had `shipments.is_perfect_order` missing and no `schema_migrations` table. Repaired via direct `ALTER TABLE`; server's idempotent backfill now runs cleanly on next startup (1.1s, ~22k rows updated). The `perfect_order_rate` slowness flagged in the prior session should now be gone.
+
+**Re-run verification.** All 17 walkthrough steps produce screenshots without page-level errors. Note pin → reload → reopen drawer round-trip confirmed end-to-end. Filter chips, Standard View, Compare Personas, KPI Catalog, KPI Studio all reach their target views.
+
+## Earlier Completed Work — Session 2026-05-13
 
 **Chat-added tile correctness pass.** User reported "a lot of bugs" on cards added via the dashboard chat — drill-down missing, no click affordance, "previous numbers are bugged." Reproduced with Playwright, fixed three root causes, then ran a broad coverage sweep. Detailed history in `SESSION_HISTORY.md`.
 
@@ -52,8 +65,9 @@ The demo targets **Manager and above only**. Analyst is explicitly out of scope.
 
 ## Open Issues / Verification Needed
 
-- **Note add/remove + target-line UI still unverified by walkthrough.** This session's Playwright sweep verified rendering, click handlers, and drill drawer opens for every chart type, but did NOT exercise note pinning, note deletion, or the scorecard target reference line behavior. Live API probes from prior session confirmed the backend works.
-- **`perfect_order_rate` is ~7s on Railway** (pre-existing). Three EXISTS subqueries per delivered shipment. Should be tackled before Phase 5: materialize `perfect_order_flag` BOOLEAN on shipments + index.
+- **P2: Executive Summary is empty for canonical / warehouse-director / procurement-lead views.** Those configs have no `number`/`scorecard` tiles, so `topKpis` is empty and the tab shows only a "See all N metrics" CTA. Either auto-promote a few tiles, or render an explicit "No headline KPIs in this view — switch to All Metrics" pointer.
+- **P2: Chat-add can produce semantically-identical tiles** (same `id+chartType+position`). Even with `tileKey()` keys, true semantic dupes still collide. The right fix is server-side dedupe in `dashboardChat` before persisting.
+- **Note removal and ScorecardTile target-line UI still unverified** by walkthrough. F1 confirmed pin + persist; deletion and target-line behavior need a follow-up Playwright pass.
 - **`InventoryTurns` and `excess_inventory_value` deltas look extreme** (100%, 681% in seeded data). Not a rendering bug — values come from `generateSnapshot`. Worth a glance if a demo viewer would be confused.
 
 ## Next Session Goals
