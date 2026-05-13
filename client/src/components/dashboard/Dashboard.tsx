@@ -55,6 +55,10 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
   const [showThresholds, setShowThresholds] = useState(false);
+  // Brief "Saved" indicator that replaces the "Updated …" timestamp for 1.5s after a
+  // background config persist. Cheap confidence-builder that filter / personalization
+  // changes are sticking; otherwise the save is invisible.
+  const [savedFlash, setSavedFlash] = useState(false);
 
   const prevMetricIds = useRef<Set<string>>(new Set());
   const [animatedIds, setAnimatedIds] = useState<Set<string>>(new Set());
@@ -70,6 +74,9 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
         ...activeConfig,
         globalFilters: next,
         updatedAt: new Date().toISOString(),
+      }).then(() => {
+        setSavedFlash(true);
+        window.setTimeout(() => setSavedFlash(false), 1500);
       }).catch(() => {});
     }, 400);
   };
@@ -397,12 +404,18 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
                     : 'My Dashboard'}
                 </h2>
                 {!isCanonical && !activePersona && (
-                  <span className="rounded-full bg-accent/10 px-2.5 py-0.5 text-[10px] font-bold text-accent-dark ring-1 ring-accent/15 uppercase tracking-wider">
+                  <span
+                    className="rounded-full bg-accent/10 px-2.5 py-0.5 text-[10px] font-bold text-accent-dark ring-1 ring-accent/15 uppercase tracking-wider"
+                    title="Built from your conversation with Claude. Edit any time via the chat."
+                  >
                     Personalized
                   </span>
                 )}
                 {isCanonical && (
-                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-600 ring-1 ring-slate-600/10 uppercase tracking-wider">
+                  <span
+                    className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-600 ring-1 ring-slate-600/10 uppercase tracking-wider"
+                    title="Default queue-health template — no personalization applied."
+                  >
                     Standard
                   </span>
                 )}
@@ -410,18 +423,45 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
               <p className="mt-1.5 text-sm text-slate-500 max-w-2xl leading-relaxed">
                 {activeConfig.interpretation.summary}
               </p>
-              <div className="mt-3 flex items-center gap-4 text-xs text-slate-400">
+              {/* Header status strip — replaces the oversized composite gauge that used to
+                  dominate the Overview tab. Always visible so Director/Manager can see the
+                  health rollup without scrolling. */}
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-500">
                 <span className="flex items-center gap-1.5">
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <svg className="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6z" />
                   </svg>
                   <span className="font-medium">{visibleMetrics.length} metrics</span>
                 </span>
+                {snapshot && (healthSummary.healthy + healthSummary.warning + healthSummary.critical > 0) && (
+                  <>
+                    <span className="text-slate-300">·</span>
+                    <span className="flex items-center gap-1.5 text-emerald-600">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      <span className="font-semibold">{healthSummary.healthy}</span> healthy
+                    </span>
+                    <span className="flex items-center gap-1.5 text-amber-600">
+                      <span className="h-2 w-2 rounded-full bg-amber-500" />
+                      <span className="font-semibold">{healthSummary.warning}</span> warning
+                    </span>
+                    <span className="flex items-center gap-1.5 text-red-600">
+                      <span className="h-2 w-2 rounded-full bg-red-500" />
+                      <span className="font-semibold">{healthSummary.critical}</span> critical
+                    </span>
+                    <span className="text-slate-300">·</span>
+                    <span className={`font-semibold ${
+                      healthSummary.score >= 80 ? 'text-emerald-600' : healthSummary.score >= 50 ? 'text-amber-600' : 'text-red-600'
+                    }`}>
+                      {healthSummary.score}% on track
+                    </span>
+                  </>
+                )}
+                <span className="text-slate-300">·</span>
                 <span className="flex items-center gap-1.5">
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <svg className="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span className="font-medium">Updated {refreshAgo()}</span>
+                  <span className="font-medium">{savedFlash ? 'Saved' : `Updated ${refreshAgo()}`}</span>
                 </span>
               </div>
             </div>
@@ -436,6 +476,10 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
                 </svg>
                 Thresholds
               </button>
+              {/* Visual separator between settings (thresholds) and view-switch controls
+                  (persona / standard). Three pill buttons of equal weight in a row read as
+                  one cluster otherwise. */}
+              <div className="h-6 w-px bg-slate-200" />
               <PersonaSelector onSelect={handlePersonaSelect} activePersona={activePersona} />
               {activeConfig.layout?.showCanonicalToggle !== false && (
                 <ViewToggle isCanonical={isCanonical} onToggle={handleToggle} />
@@ -481,68 +525,14 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
         <SkeletonGrid columns={cols} count={activeConfig.metrics.filter(m => m.visible).length || 6} />
       )}
 
-      {/* Executive Summary tab */}
+      {/* Executive Summary tab — focused on headline scorecard/number tiles only. Trend charts,
+          breakdowns, pivots, etc. live in All Metrics. Composite health rollup has moved to
+          the dashboard header strip above so it's always visible. */}
       {dashTab === 'overview' && snapshot && (
         <div className="space-y-5">
-          {/* Composite health gauge + status cards */}
-          <div className="grid gap-5 grid-cols-1 lg:grid-cols-5">
-            {/* Composite score gauge */}
-            <div className="metric-card p-6 lg:col-span-2 flex flex-col items-center justify-center">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-4">
-                Overall Health Score
-              </span>
-              <div className="relative w-52 h-[120px]">
-                <svg viewBox="0 0 200 120" className="w-full h-full">
-                  <path
-                    d="M 20 100 A 80 80 0 1 1 180 100"
-                    fill="none"
-                    stroke="#e2e8f0"
-                    strokeWidth="16"
-                    strokeLinecap="round"
-                  />
-                  {healthSummary.score > 0 && (
-                    <path
-                      d={(() => {
-                        const pct = healthSummary.score / 100;
-                        const theta = Math.PI * (1 - pct);
-                        const ex = 100 + 80 * Math.cos(theta);
-                        const ey = 100 - 80 * Math.sin(theta);
-                        return `M 20 100 A 80 80 0 ${pct > 0.5 ? 1 : 0} 1 ${ex} ${ey}`;
-                      })()}
-                      fill="none"
-                      stroke={healthSummary.score >= 80 ? '#10b981' : healthSummary.score >= 50 ? '#f59e0b' : '#ef4444'}
-                      strokeWidth="16"
-                      strokeLinecap="round"
-                    />
-                  )}
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center" style={{ top: '42%' }}>
-                  <span className="text-4xl font-bold text-slate-900">{healthSummary.score}%</span>
-                  <span className={`text-xs font-semibold mt-0.5 ${
-                    healthSummary.score >= 80 ? 'text-emerald-600' : healthSummary.score >= 50 ? 'text-amber-600' : 'text-red-600'
-                  }`}>
-                    {healthSummary.score >= 80 ? 'On Track' : healthSummary.score >= 50 ? 'At Risk' : 'Off Track'}
-                  </span>
-                </div>
-              </div>
-              <div className="mt-4 flex items-center gap-5 text-xs font-semibold">
-                <span className="flex items-center gap-1.5 text-emerald-600">
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                  {healthSummary.healthy} Healthy
-                </span>
-                <span className="flex items-center gap-1.5 text-amber-600">
-                  <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-                  {healthSummary.warning} Warning
-                </span>
-                <span className="flex items-center gap-1.5 text-red-600">
-                  <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-                  {healthSummary.critical} Critical
-                </span>
-              </div>
-            </div>
-
-            {/* Top KPI summary cards */}
-            {topKpis.slice(0, 3).map(metric => {
+          {/* Hero KPI row — first 4 headline tiles. Wider columns, status border, prior delta. */}
+          <div className="grid gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+            {topKpis.slice(0, 4).map(metric => {
               const val = snapshot.metrics[metric.id];
               if (!val) {
                 return <EmptyMetricTile key={metric.id} metric={metric} onClick={() => setSelectedMetric(metric.id)} />;
@@ -581,10 +571,10 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
             })}
           </div>
 
-          {/* Remaining KPIs in compact row */}
-          {topKpis.length > 3 && (
+          {/* Additional KPIs in compact row */}
+          {topKpis.length > 4 && (
             <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-              {topKpis.slice(3).map(metric => {
+              {topKpis.slice(4).map(metric => {
                 const val = snapshot.metrics[metric.id];
                 if (!val) {
                   return (
@@ -629,35 +619,19 @@ export function Dashboard({ config, userId, userName, onAuthorKpi }: DashboardPr
             </div>
           )}
 
-          {/* Chart / advanced widgets in overview (everything except simple number/scorecard tiles) */}
-          {standardMetrics.filter(m => m.chartType !== 'number' && m.chartType !== 'scorecard').length > 0 && (
-            <>
-              <div className="section-divider">
-                <h3>Trend Charts &amp; Widgets</h3>
-              </div>
-              <div className={gridClass}>
-                {standardMetrics
-                  .filter(m => m.chartType !== 'number' && m.chartType !== 'scorecard')
-                  .map(metric => (
-                    <div key={tileKey(metric)}>{renderTile(metric)}</div>
-                  ))}
-              </div>
-            </>
-          )}
-
-          {/* Breakdowns in overview */}
-          {breakdownMetrics.length > 0 && (
-            <>
-              <div className="section-divider">
-                <h3>Breakdowns</h3>
-              </div>
-              <div className={gridClass}>
-                {breakdownMetrics.map((metric) => (
-                  <div key={tileKey(metric)}>{renderTile(metric)}</div>
-                ))}
-              </div>
-            </>
-          )}
+          {/* CTA to switch to All Metrics — Overview is intentionally scoped to headline tiles,
+              so users who want the full picture (trends, breakdowns, pivots, etc.) go here. */}
+          {standardMetrics.some(m => m.chartType !== 'number' && m.chartType !== 'scorecard') || breakdownMetrics.length > 0 ? (
+            <button
+              onClick={() => setDashTab('metrics')}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white px-5 py-3 text-xs font-semibold text-slate-500 transition hover:border-accent hover:bg-accent/5 hover:text-accent-dark"
+            >
+              <span>See all {visibleMetrics.length} metrics — trends, breakdowns, and widgets</span>
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+              </svg>
+            </button>
+          ) : null}
         </div>
       )}
 

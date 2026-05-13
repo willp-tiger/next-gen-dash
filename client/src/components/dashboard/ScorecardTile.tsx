@@ -38,7 +38,6 @@ export function ScorecardTile({ metric, value, userId, onClick }: ScorecardTileP
   const isGood = (delta: number) => direction === 'lower-is-better' ? delta <= 0 : delta >= 0;
 
   const cmpDelta = comparison?.deltaPct ?? value.deltaPct;
-  const cmpAbs = comparison?.deltaAbs;
   const cmpLabel = comparison?.basisLabel ?? 'vs prior period';
   const good = isGood(cmpDelta);
   const arrow = cmpDelta >= 0 ? '↑' : '↓';
@@ -51,13 +50,18 @@ export function ScorecardTile({ metric, value, userId, onClick }: ScorecardTileP
       }
     : null;
 
-  // Target progress (only meaningful when a positive target exists)
+  // Target progress (only meaningful when a positive target exists).
+  // For higher-is-better, fill = value/target. For lower-is-better, fill is full when value
+  // is at or below target and shrinks as value exceeds target — the bar still reads as
+  // "how much of the headroom we've used."
   const targetPct = target > 0
     ? Math.max(0, Math.min(100, direction === 'lower-is-better'
-        ? (1 - Math.min(value.current / target, 1.5)) * 100 + 100
+        ? value.current <= target
+          ? 100
+          : Math.max(0, (1 - Math.min((value.current - target) / target, 1)) * 100)
         : (value.current / target) * 100))
     : 0;
-  const showTargetBar = target > 0 && direction === 'higher-is-better';
+  const showTargetBar = target > 0;
 
   // Sparkline Y-range — extend to include the target so the reference line is visible.
   const sparkValues = value.trend.length > 0 ? value.trend : [value.current];
@@ -111,23 +115,11 @@ export function ScorecardTile({ metric, value, userId, onClick }: ScorecardTileP
             </span>
           </div>
 
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-medium text-slate-400">
-            <span>{cmpLabel}</span>
-            {comparison && (
-              <>
-                <span>•</span>
-                <span>was {formatValue(comparison.previous, metric.unit)}</span>
-                {cmpAbs !== undefined && (
-                  <>
-                    <span>•</span>
-                    <span>{cmpAbs >= 0 ? '+' : ''}{formatValue(cmpAbs, metric.unit)}</span>
-                  </>
-                )}
-              </>
-            )}
+          <div className="mt-1 text-[10px] font-medium text-slate-400">
+            {cmpLabel}
           </div>
 
-          {/* vs target delta — surfaced when MetricConfig.target is explicitly set */}
+          {/* vs-target delta — surfaced when MetricConfig.target is explicitly set */}
           {hasExplicitTarget && targetDelta && (
             <div className="mt-1 flex items-center gap-1.5 text-[10px] font-medium">
               <span className={`font-semibold ${targetDelta.good ? 'text-emerald-600' : 'text-red-600'}`}>
@@ -137,11 +129,13 @@ export function ScorecardTile({ metric, value, userId, onClick }: ScorecardTileP
             </div>
           )}
 
-          {/* Target progress bar (higher-is-better only — lower-is-better targets read inversely) */}
+          {/* Target progress bar — renders for both directions; bar reads as headroom used */}
           {showTargetBar && (
             <div className="mt-3">
               <div className="flex items-center justify-between text-[10px] font-medium text-slate-400">
-                <span>{hasExplicitTarget ? 'Target' : 'Healthy'} {formatValue(target, metric.unit)}</span>
+                <span>
+                  {hasExplicitTarget ? 'Target' : 'Healthy'} {direction === 'lower-is-better' ? '≤ ' : ''}{formatValue(target, metric.unit)}
+                </span>
                 <span>{targetPct.toFixed(0)}%</span>
               </div>
               <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
@@ -150,13 +144,6 @@ export function ScorecardTile({ metric, value, userId, onClick }: ScorecardTileP
                   style={{ width: `${Math.min(100, targetPct)}%` }}
                 />
               </div>
-            </div>
-          )}
-
-          {/* For lower-is-better with no explicit target, show a simple "vs target" line */}
-          {!showTargetBar && target > 0 && !hasExplicitTarget && (
-            <div className="mt-2 text-[10px] font-medium text-slate-400">
-              Target ≤ {formatValue(target, metric.unit)}
             </div>
           )}
 

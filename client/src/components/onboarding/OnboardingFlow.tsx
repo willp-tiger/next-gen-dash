@@ -83,13 +83,6 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
     "I'm a procurement lead tracking supplier OTD, lead times, and quality holds",
   ];
 
-  const PROGRESS_STEPS = [
-    { label: 'Understanding your role', threshold: 0 },
-    { label: 'Gathering priorities', threshold: 1 },
-    { label: 'Refining details', threshold: 2 },
-    { label: 'Almost ready', threshold: 3 },
-  ];
-
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const initialized = useRef(false);
@@ -218,61 +211,92 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
     };
 
     return (
-      <div className="mx-auto max-w-3xl py-8">
+      <div className="mx-auto max-w-5xl py-8">
         <div className="text-center mb-8">
-          <h2 className="text-2xl font-bold text-slate-900">Choose a dashboard</h2>
-          <p className="mt-2 text-sm text-slate-500">Pick a pre-built view for your role, or build a custom one with AI</p>
+          <h2 className="text-2xl font-bold text-slate-900">How do you want to start?</h2>
+          <p className="mt-2 text-sm text-slate-500">Describe what you need in your own words, or pick a template for your role.</p>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 mb-8">
-          {PERSONA_CARDS.map(card => {
-            const c = colorMap[card.color];
-            const isLoading = loadingPersona === card.key;
-            return (
-              <button
-                key={card.key}
-                onClick={() => handlePersonaPick(card.key)}
-                disabled={loadingPersona !== null}
-                className={`relative rounded-xl border-2 ${c.border} ${c.bg} p-5 text-left transition hover:shadow-lg disabled:opacity-60 ${isLoading ? `ring-2 ${c.ring}` : ''}`}
-              >
-                {isLoading && (
-                  <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-white/60">
-                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-navy-200 border-t-navy-600" />
-                  </div>
-                )}
-                <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${c.icon} mb-3`}>
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d={card.icon} />
-                  </svg>
-                </div>
-                <h3 className="text-sm font-semibold text-slate-900">{card.title}</h3>
-                <p className="mt-1 text-xs text-slate-500">{card.description}</p>
-                <div className="mt-3 flex items-center gap-2">
-                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-slate-500 ring-1 ring-slate-200/60">{card.metrics}</span>
-                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-slate-500 ring-1 ring-slate-200/60">Real data</span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex items-center gap-4 mb-8">
-          <div className="flex-1 border-t border-slate-200" />
-          <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">or</span>
-          <div className="flex-1 border-t border-slate-200" />
-        </div>
-
-        <div className="text-center">
+        <div className="grid gap-5 lg:grid-cols-2">
+          {/* AI builder — equal-weight column */}
           <button
             onClick={() => setMode('chat')}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:border-slate-400"
+            disabled={loadingPersona !== null}
+            className="group relative flex flex-col items-start rounded-2xl border-2 border-navy-300 bg-gradient-to-br from-accent/10 via-white to-accent/5 p-6 text-left shadow-sm transition hover:border-accent hover:shadow-lg disabled:opacity-60"
           >
-            <svg className="h-4 w-4 text-accent" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-            </svg>
-            Build a custom dashboard with AI
+            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-accent text-white shadow-sm">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+              </svg>
+            </div>
+            <h3 className="mt-4 text-base font-semibold text-slate-900">Build with AI</h3>
+            <p className="mt-1.5 text-sm text-slate-600 leading-relaxed">
+              Tell Claude your role and what matters most. It will choose metrics, set thresholds, and lay out a dashboard for you in about a minute.
+            </p>
+            <ul className="mt-4 space-y-1.5 text-xs text-slate-500">
+              <li className="flex items-start gap-2">
+                <svg className="h-3.5 w-3.5 mt-0.5 text-accent flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                <span>Natural-language input — no menus to configure</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <svg className="h-3.5 w-3.5 mt-0.5 text-accent flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                <span>Review the interpretation before anything is saved</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <svg className="h-3.5 w-3.5 mt-0.5 text-accent flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                <span>Keep refining later via dashboard chat</span>
+              </li>
+            </ul>
+            <span className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-navy-700 px-4 py-2 text-xs font-semibold text-white group-hover:bg-navy-800 transition">
+              Start a conversation
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+              </svg>
+            </span>
           </button>
-          <p className="mt-2 text-xs text-slate-400">Describe your role and priorities in a conversation with Claude</p>
+
+          {/* Templates column */}
+          <div className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+              </svg>
+            </div>
+            <h3 className="mt-4 text-base font-semibold text-slate-900">Start from a template</h3>
+            <p className="mt-1.5 text-sm text-slate-600 leading-relaxed">
+              Pre-built views for common supply-chain roles. You can still ask Claude to modify it after.
+            </p>
+            <div className="mt-4 space-y-2.5">
+              {PERSONA_CARDS.map(card => {
+                const c = colorMap[card.color];
+                const isLoading = loadingPersona === card.key;
+                return (
+                  <button
+                    key={card.key}
+                    onClick={() => handlePersonaPick(card.key)}
+                    disabled={loadingPersona !== null}
+                    className={`group relative flex w-full items-center gap-3 rounded-xl border ${c.border} ${c.bg} p-3 text-left transition disabled:opacity-60 ${isLoading ? `ring-2 ${c.ring}` : 'hover:shadow-sm'}`}
+                  >
+                    {isLoading && (
+                      <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-white/60">
+                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-navy-200 border-t-navy-600" />
+                      </div>
+                    )}
+                    <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg ${c.icon}`}>
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d={card.icon} />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-semibold text-slate-900 leading-tight">{card.title}</h4>
+                      <p className="mt-0.5 text-xs text-slate-500 leading-snug">{card.description}</p>
+                    </div>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{card.metrics}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -294,31 +318,10 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
           Build a custom dashboard
         </h2>
         <p className="mt-1 text-sm text-slate-500">
-          Tell me what you need to monitor and I&apos;ll personalize your view
+          {isBuilding
+            ? 'Building your personalized dashboard…'
+            : 'Claude will ask a few questions about your role and priorities.'}
         </p>
-
-        {/* Progress indicator */}
-        {(() => {
-          const userMsgCount = messages.filter(m => m.role === 'user').length;
-          const stepIndex = Math.min(userMsgCount, PROGRESS_STEPS.length - 1);
-          const progress = isBuilding ? 100 : Math.min(((userMsgCount + 1) / 5) * 100, 95);
-          const stepLabel = isBuilding ? 'Building dashboard...' : PROGRESS_STEPS[stepIndex].label;
-
-          return (
-            <div className="mt-3">
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span>{stepLabel}</span>
-                <span>{Math.round(progress)}%</span>
-              </div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-50">
-                <div
-                  className="h-full rounded-full bg-accent transition-all duration-700 ease-out"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            </div>
-          );
-        })()}
       </div>
 
       {/* Messages area */}

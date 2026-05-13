@@ -15,6 +15,8 @@ interface ChatMessage {
   authorPhrase?: string | null;
 }
 
+const TEASER_DISMISSED_KEY = 'ngd:chat-teaser-dismissed';
+
 export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: DashboardChatProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -23,6 +25,9 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  // One-time teaser callout next to the FAB. Persists dismissal in localStorage so it doesn't
+  // re-fire on every page load — chat discoverability matters once per user, not forever.
+  const [showTeaser, setShowTeaser] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -37,6 +42,21 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
       inputRef.current?.focus();
     }
   }, [isOpen, isLoading]);
+
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(TEASER_DISMISSED_KEY)) return;
+    } catch {
+      return;
+    }
+    const timer = window.setTimeout(() => setShowTeaser(true), 1200);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const dismissTeaser = () => {
+    setShowTeaser(false);
+    try { window.localStorage.setItem(TEASER_DISMISSED_KEY, '1'); } catch { /* ignore */ }
+  };
 
   const handleSend = async () => {
     const trimmed = input.trim();
@@ -123,20 +143,54 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
 
   return (
     <>
-      {/* Toggle button */}
+      {/* First-load teaser callout — points to the FAB so users discover that the chat is also
+          the primary mutator after onboarding. */}
+      {!isOpen && showTeaser && (
+        <div className="fixed bottom-24 right-6 z-50 max-w-xs animate-fade-in">
+          <div className="relative rounded-2xl bg-navy-700 px-4 py-3 text-white shadow-xl shadow-navy-700/30 ring-1 ring-white/10">
+            <button
+              onClick={dismissTeaser}
+              className="absolute right-2 top-2 text-navy-300 hover:text-white"
+              aria-label="Dismiss"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <div className="flex items-start gap-2 pr-5">
+              <svg className="h-4 w-4 mt-0.5 text-accent-light flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+              </svg>
+              <div className="text-xs leading-relaxed">
+                <p className="font-semibold">Ask Claude anything about this dashboard</p>
+                <p className="mt-0.5 text-navy-200">Try: <span className="italic">"Break down OTIF by region"</span> or <span className="italic">"add a customer pipeline tile"</span></p>
+              </div>
+            </div>
+            <div className="absolute -bottom-2 right-7 h-3 w-3 rotate-45 bg-navy-700" />
+          </div>
+        </div>
+      )}
+
+      {/* Toggle button with persistent label */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-navy-700 text-white shadow-lg shadow-navy-700/25 transition-all duration-200 hover:bg-navy-800 hover:shadow-xl hover:shadow-navy-700/30 focus:outline-none focus:ring-2 focus:ring-accent/50"
-        title="Modify dashboard"
+        onClick={() => { setIsOpen(!isOpen); dismissTeaser(); }}
+        className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-navy-700 text-white shadow-lg shadow-navy-700/25 transition-all duration-200 hover:bg-navy-800 hover:shadow-xl hover:shadow-navy-700/30 focus:outline-none focus:ring-2 focus:ring-accent/50 ${
+          isOpen ? 'h-14 w-14 justify-center' : 'h-14 pl-4 pr-5'
+        }`}
+        title={isOpen ? 'Close chat' : 'Ask Claude to modify the dashboard'}
+        aria-label={isOpen ? 'Close chat' : 'Open dashboard chat'}
       >
         {isOpen ? (
           <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         ) : (
-          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
+          <>
+            <svg className="h-5 w-5 text-accent-light" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+            </svg>
+            <span className="text-sm font-semibold">Ask Claude</span>
+          </>
         )}
       </button>
 
@@ -156,13 +210,14 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
             <div className="flex items-center gap-3">
               <button
                 onClick={async () => {
+                  if (!window.confirm('Clear this conversation? Your dashboard changes will stay.')) return;
                   await resetDashboardChat(userId).catch(() => {});
-                  setMessages([{ role: 'assistant', text: 'Conversation reset. How can I help?' }]);
+                  setMessages([{ role: 'assistant', text: 'Conversation cleared. How can I help?' }]);
                 }}
                 className="text-[11px] font-medium text-navy-300 hover:text-white transition"
-                title="Reset conversation"
+                title="Clear conversation (dashboard changes stay)"
               >
-                Reset
+                Clear
               </button>
               <button
                 onClick={() => setIsExpanded(!isExpanded)}

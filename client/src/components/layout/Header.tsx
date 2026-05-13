@@ -72,8 +72,9 @@ export function Header({ activeTab, dashboardPhase, onReset, sidebarCollapsed, u
             <button
               onClick={onReset}
               className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-navy-200 transition hover:bg-white/10 hover:text-white"
+              title="Discard this dashboard and start a new one"
             >
-              Start Over
+              New dashboard
             </button>
           )}
 

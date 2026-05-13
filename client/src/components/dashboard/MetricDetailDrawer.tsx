@@ -138,11 +138,16 @@ export function MetricDetailDrawer({
   const [drill, setDrill] = useState<DrillSnapshot | null>(null);
   const [drillLoading, setDrillLoading] = useState(false);
   const [drillError, setDrillError] = useState<string | null>(null);
+  // Client-side sort state. The server returns rows already sorted by the most-relevant
+  // column (e.g. days_late desc for OTIF); clicking a column header overrides that.
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
     let cancelled = false;
     setDrillLoading(true);
     setDrillError(null);
+    setSortKey(null);
     getDrill(metric.id, filters, 50)
       .then(snap => { if (!cancelled) setDrill(snap); })
       .catch(err => { if (!cancelled) setDrillError(err instanceof Error ? err.message : 'Failed to load underlying records'); })
@@ -150,6 +155,57 @@ export function MetricDetailDrawer({
     return () => { cancelled = true; };
     // Re-fetch when metric or active filters change.
   }, [metric.id, JSON.stringify(filters)]);
+
+  const sortedRows = useMemo(() => {
+    if (!drill || !sortKey) return drill?.rows ?? [];
+    const col = drill.columns.find(c => c.key === sortKey);
+    const numeric = col && (col.kind === 'number' || col.kind === 'currency' || col.kind === 'percent');
+    const rows = [...drill.rows];
+    rows.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      if (av === null || av === undefined) return 1;
+      if (bv === null || bv === undefined) return -1;
+      let cmp = 0;
+      if (numeric) cmp = Number(av) - Number(bv);
+      else cmp = String(av).localeCompare(String(bv));
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return rows;
+  }, [drill, sortKey, sortDir]);
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('desc');
+    }
+  };
+
+  const handleExportCsv = () => {
+    if (!drill || drill.rows.length === 0) return;
+    const escape = (v: string | number | null): string => {
+      if (v === null || v === undefined) return '';
+      const s = String(v);
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+    const header = drill.columns.map(c => escape(c.label)).join(',');
+    const rows = sortedRows.map(r => drill.columns.map(c => escape(r[c.key])).join(','));
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${metric.id}-${drill.source}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   // Notes
   const notes = metric.notes ?? [];
@@ -416,11 +472,25 @@ export function MetricDetailDrawer({
               <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 Underlying Records
               </h4>
-              {drill && (
-                <span className="text-[10px] font-medium text-slate-400">
-                  {drill.rows.length} of {drill.totalRows.toLocaleString()} {drill.source.replace('_', ' ')}
-                </span>
-              )}
+              <div className="flex items-center gap-3">
+                {drill && (
+                  <span className="text-[10px] font-medium text-slate-400">
+                    {drill.rows.length} of {drill.totalRows.toLocaleString()} {drill.source.replace('_', ' ')}
+                  </span>
+                )}
+                {drill && drill.rows.length > 0 && (
+                  <button
+                    onClick={handleExportCsv}
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:border-slate-300"
+                    title="Download these rows as CSV"
+                  >
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                    </svg>
+                    Export CSV
+                  </button>
+                )}
+              </div>
             </div>
             {drill?.rowDescription && (
               <p className="text-[11px] text-slate-500 mb-2">{drill.rowDescription}</p>
@@ -445,18 +515,29 @@ export function MetricDetailDrawer({
                 <table className="w-full text-xs">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
-                      {drill.columns.map(col => (
-                        <th
-                          key={col.key}
-                          className={`px-3 py-2 text-left font-semibold uppercase tracking-wider text-[10px] ${col.primary ? 'text-slate-900' : 'text-slate-500'} ${col.kind === 'number' || col.kind === 'currency' || col.kind === 'percent' ? 'text-right' : ''}`}
-                        >
-                          {col.label}
-                        </th>
-                      ))}
+                      {drill.columns.map(col => {
+                        const isSorted = sortKey === col.key;
+                        const isNumeric = col.kind === 'number' || col.kind === 'currency' || col.kind === 'percent';
+                        return (
+                          <th
+                            key={col.key}
+                            onClick={() => handleSort(col.key)}
+                            className={`px-3 py-2 text-left font-semibold uppercase tracking-wider text-[10px] cursor-pointer select-none hover:bg-slate-100 transition ${col.primary ? 'text-slate-900' : 'text-slate-500'} ${isNumeric ? 'text-right' : ''}`}
+                            title="Click to sort"
+                          >
+                            <span className={`inline-flex items-center gap-1 ${isNumeric ? 'flex-row-reverse' : ''}`}>
+                              {col.label}
+                              <span className={`text-[9px] ${isSorted ? 'text-slate-700' : 'text-slate-300'}`}>
+                                {isSorted ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
+                              </span>
+                            </span>
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody>
-                    {drill.rows.map((row, i) => (
+                    {sortedRows.map((row, i) => (
                       <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
                         {drill.columns.map(col => {
                           const formatted = formatCell(row[col.key], col.kind, metric.unit);
