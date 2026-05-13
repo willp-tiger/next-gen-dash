@@ -6,19 +6,23 @@ import { getConfig, setConfig } from '../services/configStore.js';
 import { classifyLLMError } from '../services/llmErrors.js';
 import { getPublishedKpis } from '../services/kpiStore.js';
 import { buildChatSnapshot } from '../services/chatSnapshot.js';
+import { CHAT_TOOLS, executeChatTool } from '../services/chatTools.js';
 import { recordChatMentions } from './refinement.js';
-import type { DashboardConfig, MetricConfig } from '../../../shared/types.js';
+import type { DashboardConfig, FilterState, MetricConfig, ToolEvidence } from '../../../shared/types.js';
 
 const router = Router();
 const client = new Anthropic();
 const MODEL = 'claude-sonnet-4-20250514';
+const MAX_TOOL_ITERATIONS = 6;
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
 }
 
-// Conversation history per user for multi-turn context
+// Conversation history per user for multi-turn context. We persist only the user-visible
+// turns (the user's contextMessage and the assistant's final text), not the intermediate
+// tool_use/tool_result round-trips — those would balloon the context budget on every turn.
 const chatHistories = new Map<string, ChatMessage[]>();
 
 function extractJSON(text: string): string {
@@ -47,6 +51,88 @@ function extractJSON(text: string): string {
     }
   }
   return s.trim();
+}
+
+/**
+ * Run one chat turn with tool-use enabled. Loops over tool_use round-trips up to
+ * MAX_TOOL_ITERATIONS, collecting evidence as it goes. Returns the assistant's final text
+ * block and the ordered evidence list. Tool execution failures are converted to tool_result
+ * error payloads so the model can adapt rather than crashing the turn.
+ */
+async function runChatTurn(
+  userMessage: string,
+  history: ChatMessage[],
+  globalFilters: FilterState | undefined,
+): Promise<{ finalText: string; evidence: ToolEvidence[] }> {
+  const evidence: ToolEvidence[] = [];
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const messages: any[] = [
+    ...history.map(h => ({ role: h.role, content: h.content })),
+    { role: 'user', content: userMessage },
+  ];
+
+  let finalText = '';
+
+  for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 2048,
+      system: buildDashboardChatPrompt(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tools: CHAT_TOOLS as any,
+      messages,
+    });
+
+    if (response.stop_reason === 'tool_use') {
+      // Persist the assistant's tool_use turn into the loop history so subsequent calls see it.
+      messages.push({ role: 'assistant', content: response.content });
+
+      const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
+      const toolResults = await Promise.all(toolUseBlocks.map(async (block) => {
+        if (block.type !== 'tool_use') return null;
+        try {
+          const { result, summary } = await executeChatTool(block.name, block.input, globalFilters);
+          evidence.push({
+            toolName: block.name,
+            toolInput: block.input as Record<string, unknown>,
+            toolResult: result,
+            summary,
+          });
+          return {
+            type: 'tool_result' as const,
+            tool_use_id: block.id,
+            content: JSON.stringify(result),
+          };
+        } catch (toolErr) {
+          const errMsg = toolErr instanceof Error ? toolErr.message : String(toolErr);
+          console.error(`Tool ${block.name} failed:`, toolErr);
+          evidence.push({
+            toolName: block.name,
+            toolInput: block.input as Record<string, unknown>,
+            toolResult: { error: errMsg },
+            summary: `error: ${errMsg.slice(0, 80)}`,
+          });
+          return {
+            type: 'tool_result' as const,
+            tool_use_id: block.id,
+            content: JSON.stringify({ error: errMsg }),
+            is_error: true,
+          };
+        }
+      }));
+
+      messages.push({ role: 'user', content: toolResults.filter(Boolean) });
+      continue;
+    }
+
+    // No more tool_use — extract the final text block.
+    const textBlock = response.content.find(b => b.type === 'text');
+    finalText = textBlock && textBlock.type === 'text' ? textBlock.text : '';
+    break;
+  }
+
+  return { finalText, evidence };
 }
 
 router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) => {
@@ -89,45 +175,35 @@ router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) 
 
     const contextMessage = `Current dashboard metrics (config shape):\n${currentMetrics}${publishedSection}${snapshotBlock}\n\nUser request: ${message}`;
 
-    // Get or create chat history
     const history = chatHistories.get(userId) || [];
+    const { finalText, evidence } = await runChatTurn(contextMessage, history, config.globalFilters);
+
     history.push({ role: 'user', content: contextMessage });
-
-    const response = await client.messages.create({
-      model: MODEL,
-      max_tokens: 1024,
-      system: buildDashboardChatPrompt(),
-      messages: history,
-    });
-
-    const textBlock = response.content.find(b => b.type === 'text');
-    const rawReply = textBlock?.type === 'text' ? textBlock.text : '';
-
-    history.push({ role: 'assistant', content: rawReply });
-    // Keep only last 10 exchanges to prevent context bloat
+    history.push({ role: 'assistant', content: finalText });
+    // Keep only the last 10 exchanges to prevent context bloat.
     if (history.length > 20) {
       chatHistories.set(userId, history.slice(-20));
     } else {
       chatHistories.set(userId, history);
     }
 
-    // Parse the response
+    // Parse the final assistant text. Mutation intents respond with JSON containing an "action";
+    // interpretation intents may respond with prose. Be lenient — only treat the response as
+    // a structured action when JSON parse succeeds AND it has an "action" or "message" field.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let parsed: any;
+    let parsed: any = null;
     try {
-      parsed = JSON.parse(extractJSON(rawReply));
-    } catch (parseErr) {
-      console.error('Dashboard chat JSON parse failed. Raw reply:', rawReply);
-      console.error('Parse error:', parseErr);
-      res.json({
-        message: "I couldn't quite parse that. Could you rephrase — for example, \"filter to Q1 2004\" or \"show only Classic Cars\"?",
-        action: null,
-        config: null,
-      });
-      return;
+      parsed = JSON.parse(extractJSON(finalText));
+      if (typeof parsed !== 'object' || parsed === null) parsed = null;
+    } catch {
+      parsed = null;
     }
-    const replyMessage: string = parsed.message || 'Done.';
-    const action: string | undefined = parsed.action;
+    const isStructured = parsed !== null && ('action' in parsed || 'message' in parsed);
+
+    const replyMessage: string = isStructured
+      ? (parsed.message || finalText.trim() || 'Done.')
+      : finalText.trim() || 'Done.';
+    const action: string | undefined = isStructured ? parsed.action : undefined;
     let updatedConfig: DashboardConfig | null = null;
     let authorPhrase: string | null = null;
 
@@ -239,6 +315,7 @@ router.post('/:userId', async (req: Request<{ userId: string }>, res: Response) 
       action: action || null,
       config: updatedConfig,
       authorPhrase,
+      evidence,
     });
   } catch (err) {
     console.error('Dashboard chat error:', err);

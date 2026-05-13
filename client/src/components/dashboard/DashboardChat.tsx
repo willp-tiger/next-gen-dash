@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import type { DashboardConfig } from 'shared/types';
+import type { DashboardConfig, ToolEvidence } from 'shared/types';
 import { dashboardChat, resetDashboardChat, ApiError } from '../../api/client';
 
 interface DashboardChatProps {
@@ -13,9 +13,121 @@ interface ChatMessage {
   text: string;
   action?: string | null;
   authorPhrase?: string | null;
+  evidence?: ToolEvidence[];
 }
 
 const TEASER_DISMISSED_KEY = 'ngd:chat-teaser-dismissed';
+
+function formatToolInput(input: Record<string, unknown>): string {
+  const entries: string[] = [];
+  for (const [k, v] of Object.entries(input)) {
+    if (v === undefined || v === null) continue;
+    if (k === 'filters' && typeof v === 'object' && Object.keys(v as object).length === 0) continue;
+    if (typeof v === 'object') {
+      const sub = Object.entries(v as Record<string, unknown>)
+        .filter(([, vv]) => vv !== null && vv !== undefined && vv !== '')
+        .map(([sk, sv]) => `${sk}=${String(sv)}`).join(', ');
+      if (sub) entries.push(`${k}={${sub}}`);
+    } else {
+      entries.push(`${k}=${Array.isArray(v) ? `[${v.join(',')}]` : String(v)}`);
+    }
+  }
+  return entries.join(', ');
+}
+
+interface ToolResultRows {
+  columns?: { key: string; label: string }[];
+  rows?: Record<string, unknown>[];
+}
+
+function EvidenceBlock({ evidence }: { evidence: ToolEvidence[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const [openIdx, setOpenIdx] = useState<number | null>(null);
+
+  return (
+    <div className="mt-2 rounded-xl border border-slate-200/70 bg-white/60 text-[11px]">
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-slate-500 hover:text-slate-700"
+      >
+        <span className="inline-flex items-center gap-1.5">
+          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a6.759 6.759 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
+          </svg>
+          <span className="font-semibold">{evidence.length} tool call{evidence.length === 1 ? '' : 's'}</span>
+          <span className="text-slate-400">— {evidence.map(e => e.toolName).join(', ')}</span>
+        </span>
+        <svg className={`h-3 w-3 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+        </svg>
+      </button>
+      {expanded && (
+        <div className="space-y-1.5 border-t border-slate-200/60 px-2 py-2">
+          {evidence.map((ev, i) => {
+            const isOpen = openIdx === i;
+            const summary = ev.summary || `${ev.toolName}`;
+            const argsLine = formatToolInput(ev.toolInput);
+            const result = ev.toolResult as ToolResultRows | Record<string, unknown> | null;
+            const rows = (result && typeof result === 'object' && 'rows' in result) ? (result as ToolResultRows).rows : undefined;
+            const cols = (result && typeof result === 'object' && 'columns' in result) ? (result as ToolResultRows).columns : undefined;
+            return (
+              <div key={i} className="rounded-lg bg-slate-50 ring-1 ring-slate-200/60">
+                <button
+                  onClick={() => setOpenIdx(isOpen ? null : i)}
+                  className="flex w-full items-start justify-between gap-2 px-2.5 py-1.5 text-left"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-mono text-[10.5px] text-slate-700 truncate">
+                      <span className="font-semibold text-navy-700">{ev.toolName}</span>
+                      {argsLine && <span className="text-slate-500">({argsLine})</span>}
+                    </span>
+                    <span className="block text-[10px] text-slate-500 truncate">{summary}</span>
+                  </span>
+                  <svg className={`mt-1 h-3 w-3 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                  </svg>
+                </button>
+                {isOpen && (
+                  <div className="border-t border-slate-200/60 px-2.5 py-2">
+                    {rows && Array.isArray(rows) && rows.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-[10px]">
+                          <thead>
+                            <tr className="text-left text-slate-500">
+                              {(cols ?? Object.keys(rows[0]).map(k => ({ key: k, label: k }))).slice(0, 6).map(c => (
+                                <th key={c.key} className="px-1.5 py-1 font-semibold">{c.label}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.slice(0, 10).map((r, ri) => (
+                              <tr key={ri} className="border-t border-slate-200/40 text-slate-700">
+                                {(cols ?? Object.keys(rows[0]).map(k => ({ key: k, label: k }))).slice(0, 6).map(c => (
+                                  <td key={c.key} className="px-1.5 py-1 font-mono">
+                                    {r[c.key] === null || r[c.key] === undefined ? '—' : String(r[c.key])}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {rows.length > 10 && (
+                          <div className="mt-1 text-[10px] text-slate-400">+{rows.length - 10} more rows</div>
+                        )}
+                      </div>
+                    ) : (
+                      <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] text-slate-700">{JSON.stringify(result, null, 2)}</pre>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: DashboardChatProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -84,6 +196,7 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
         text: res.message,
         action: res.action,
         authorPhrase: res.authorPhrase ?? null,
+        evidence: res.evidence,
       }]);
       if (res.config) {
         onConfigUpdate(res.config);
@@ -119,6 +232,7 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
           text: res.message,
           action: res.action,
           authorPhrase: res.authorPhrase ?? null,
+          evidence: res.evidence,
         }]);
         if (res.config) onConfigUpdate(res.config);
       }).catch(() => {
@@ -256,25 +370,30 @@ export function DashboardChat({ userId, onConfigUpdate, onAuthorKpi }: Dashboard
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                  msg.role === 'user'
-                    ? 'bg-navy-600 text-white'
-                    : 'bg-slate-50 text-slate-800 ring-1 ring-slate-200/60'
-                }`}>
-                  {msg.text}
-                  {msg.role === 'assistant' && actionBadge(msg.action)}
-                  {msg.role === 'assistant' && msg.action === 'author' && msg.authorPhrase && onAuthorKpi && (
-                    <div className="mt-2">
-                      <button
-                        onClick={() => onAuthorKpi(msg.authorPhrase as string)}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-navy-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-navy-700"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                        </svg>
-                        Open in Studio
-                      </button>
-                    </div>
+                <div className={`max-w-[85%] ${msg.role === 'user' ? '' : 'flex-1'}`}>
+                  <div className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                    msg.role === 'user'
+                      ? 'bg-navy-600 text-white'
+                      : 'bg-slate-50 text-slate-800 ring-1 ring-slate-200/60'
+                  }`}>
+                    {msg.text}
+                    {msg.role === 'assistant' && actionBadge(msg.action)}
+                    {msg.role === 'assistant' && msg.action === 'author' && msg.authorPhrase && onAuthorKpi && (
+                      <div className="mt-2">
+                        <button
+                          onClick={() => onAuthorKpi(msg.authorPhrase as string)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-navy-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-navy-700"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                          </svg>
+                          Open in Studio
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {msg.role === 'assistant' && msg.evidence && msg.evidence.length > 0 && (
+                    <EvidenceBlock evidence={msg.evidence} />
                   )}
                 </div>
               </div>

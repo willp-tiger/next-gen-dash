@@ -18,6 +18,7 @@ import type {
   TopNDimension,
   BulletSnapshot,
   CalendarSnapshot,
+  ToolEvidence,
 } from 'shared/types';
 
 const BASE_URL = '/api';
@@ -238,6 +239,7 @@ export function dashboardChat(userId: string, message: string) {
     action: string | null;
     config: DashboardConfig | null;
     authorPhrase?: string | null;
+    evidence?: ToolEvidence[];
   }>(
     `/dashboard-chat/${userId}`,
     {

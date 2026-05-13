@@ -406,6 +406,24 @@ export interface InterpretResponse {
   config: DashboardConfig;
 }
 
+/** One tool call made during a chat turn — surfaced to the client as an evidence block so the
+ *  user can inspect how the assistant's answer was derived. */
+export interface ToolEvidence {
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  toolResult: unknown;
+  /** Optional one-line human-readable summary (e.g., "top 10 supplier by supplier_otd"). */
+  summary?: string;
+}
+
+export interface DashboardChatResponse {
+  message: string;
+  action: string | null;
+  config: DashboardConfig | null;
+  authorPhrase: string | null;
+  evidence: ToolEvidence[];
+}
+
 export type HealthStatus = 'healthy' | 'warning' | 'critical';
 
 // === Available KPI Registry (must match seeded kpi_definitions) ===
