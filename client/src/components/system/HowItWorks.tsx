@@ -98,6 +98,24 @@ function AgentCard({ agent, index, expanded, onToggle }: {
         </div>
       </div>
 
+      {agent.tools && agent.tools.length > 0 && (
+        <div className="border-t border-slate-100 bg-slate-50/40 px-5 py-4">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+            Tools ({agent.tools.length})
+          </p>
+          <ul className="space-y-1.5">
+            {agent.tools.map((tool) => (
+              <li key={tool.name} className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                <code className="rounded bg-white px-1.5 py-0.5 text-[12px] font-semibold text-navy-700 ring-1 ring-slate-200">
+                  {tool.name}
+                </code>
+                <span className="text-xs text-slate-600">{tool.description}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="border-t border-slate-100 px-5 py-3">
         <button
           onClick={onToggle}

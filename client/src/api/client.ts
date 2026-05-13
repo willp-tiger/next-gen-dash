@@ -434,6 +434,11 @@ export function runKpiHealth() {
   return fetchJson<HealthSnapshot>('/kpis/health/run', { method: 'POST' });
 }
 
+export interface AgentToolMeta {
+  name: string;
+  description: string;
+}
+
 export interface AgentMeta {
   id: 'onboarding' | 'interpret' | 'chat' | 'refinement' | 'studio';
   name: string;
@@ -441,6 +446,7 @@ export interface AgentMeta {
   trigger: string;
   model: string;
   inputs: string[];
+  tools?: AgentToolMeta[];
   outputs: { label: string; when: string }[];
   systemPrompt: string;
   promptSourceFile: string;

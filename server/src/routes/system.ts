@@ -5,10 +5,16 @@ import { buildInterpretPrompt } from '../prompts/interpret.js';
 import { buildDashboardChatPrompt } from '../prompts/dashboardChat.js';
 import { buildRefinementPrompt } from '../prompts/refine.js';
 import { buildKpiStudioPrompt } from '../prompts/kpiStudio.js';
+import { CHAT_TOOLS } from '../services/chatTools.js';
 
 const router = Router();
 
 const MODEL = 'claude-sonnet-4-20250514';
+
+export interface AgentToolMeta {
+  name: string;
+  description: string;
+}
 
 export interface AgentMeta {
   id: 'onboarding' | 'interpret' | 'chat' | 'refinement' | 'studio';
@@ -17,10 +23,18 @@ export interface AgentMeta {
   trigger: string;
   model: string;
   inputs: string[];
+  /** Tools the agent can call via the SDK's tool_use loop (where applicable). */
+  tools?: AgentToolMeta[];
   outputs: { label: string; when: string }[];
   systemPrompt: string;
   promptSourceFile: string;
   nextAgents: string[];
+}
+
+/** Shorten a tool description to a single sentence for the metadata card. */
+function shortDescription(desc: string): string {
+  const firstStop = desc.search(/[.!?](\s|$)/);
+  return firstStop > 0 ? desc.slice(0, firstStop + 1) : desc;
 }
 
 router.get('/agents', async (_req: Request, res: Response) => {
@@ -69,7 +83,7 @@ router.get('/agents', async (_req: Request, res: Response) => {
       {
         id: 'chat',
         name: 'Dashboard Chat',
-        tagline: 'Runtime mutator. Adds, edits, filters, interprets, or routes the user to the Studio.',
+        tagline: 'Runtime mutator + semantic-layer Q&A. Mutates the dashboard, interprets values, and queries the underlying data via curated tools — no RAG, no vector store.',
         trigger: 'User types in the dashboard chat panel.',
         model: MODEL,
         inputs: [
@@ -77,14 +91,19 @@ router.get('/agents', async (_req: Request, res: Response) => {
           'Current dashboard state: real values, computed health (GREEN/YELLOW/RED), trend tails, comparisons vs prior period/year.',
           'Active annotations overlapping the filter window.',
           'Available metric catalog + Studio-authored list.',
+          'Conversation history (last 10 exchanges).',
         ],
+        tools: CHAT_TOOLS.map(t => ({
+          name: t.name,
+          description: shortDescription(t.description),
+        })),
         outputs: [
           { label: 'action: "add"', when: 'user requests a new tile (12 chart types supported)' },
           { label: 'action: "remove"', when: 'user removes a tile' },
           { label: 'action: "edit"', when: 'user changes threshold, chart type, label, size' },
           { label: 'action: "filter"', when: 'user filters by region/warehouse/segment/category/tier/date or compareTo' },
           { label: 'action: "author"', when: 'user asks for a metric not in catalog → routes to Studio' },
-          { label: 'no action, message only', when: 'interpretation / explanation / Q&A grounded in dashboard state' },
+          { label: 'narrative message + evidence[]', when: 'interpretation / explanation / ad-hoc Q&A — uses tools when the snapshot is not enough; evidence captures every tool call for inspection in the UI' },
         ],
         systemPrompt: buildDashboardChatPrompt(),
         promptSourceFile: 'server/src/prompts/dashboardChat.ts',
