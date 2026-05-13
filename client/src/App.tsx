@@ -10,6 +10,7 @@ import { Sidebar } from './components/layout/Sidebar';
 import { KpiCatalog } from './components/enterprise/KpiCatalog';
 import { KpiStudio } from './components/enterprise/KpiStudio';
 import { KpiHealth } from './components/enterprise/KpiHealth';
+import { HowItWorks } from './components/system/HowItWorks';
 import { getDashboardConfig } from './api/client';
 
 type DashboardPhase = 'onboarding' | 'review' | 'dashboard';
@@ -163,6 +164,7 @@ export default function App() {
             <KpiStudio seedPrompt={studioSeed} onSeedConsumed={() => setStudioSeed(null)} />
           )}
           {activeTab === 'health' && <KpiHealth />}
+          {activeTab === 'howItWorks' && <HowItWorks />}
         </div>
       </main>
     </div>

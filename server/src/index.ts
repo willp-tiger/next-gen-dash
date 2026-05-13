@@ -16,6 +16,7 @@ import kpiStudioRouter from './routes/kpiStudio.js';
 import kpisRouter from './routes/kpis.js';
 import authRouter from './routes/auth.js';
 import widgetsRouter from './routes/widgets.js';
+import systemRouter from './routes/system.js';
 
 import { runMigrations } from './services/migrate.js';
 import { initKpiDefinitions } from './services/kpiDefinitionStore.js';
@@ -38,6 +39,7 @@ app.use('/api/kpi-studio', kpiStudioRouter);
 app.use('/api/kpis', kpisRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/widgets', widgetsRouter);
+app.use('/api/system', systemRouter);
 
 // Production: serve static frontend
 if (process.env.NODE_ENV === 'production') {

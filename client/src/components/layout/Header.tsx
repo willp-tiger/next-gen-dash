@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { UserProfile } from 'shared/types';
 
-export type AppTab = 'dashboard' | 'catalog' | 'studio' | 'health';
+export type AppTab = 'dashboard' | 'catalog' | 'studio' | 'health' | 'howItWorks';
 
 interface HeaderProps {
   activeTab: AppTab;
@@ -18,6 +18,7 @@ const TAB_LABELS: Record<AppTab, string> = {
   catalog: 'KPI Catalog',
   studio: 'KPI Studio',
   health: 'KPI Health',
+  howItWorks: 'How it works',
 };
 
 const TAB_SUBTITLES: Record<AppTab, string> = {
@@ -25,6 +26,7 @@ const TAB_SUBTITLES: Record<AppTab, string> = {
   catalog: 'Browse and manage KPI definitions',
   studio: 'Author new KPIs with AI assistance',
   health: 'Monitor KPI data quality and freshness',
+  howItWorks: 'The Claude agents that power the dashboard',
 };
 
 function getInitials(name: string): string {

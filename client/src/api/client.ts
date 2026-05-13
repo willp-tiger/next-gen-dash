@@ -432,6 +432,23 @@ export function runKpiHealth() {
   return fetchJson<HealthSnapshot>('/kpis/health/run', { method: 'POST' });
 }
 
+export interface AgentMeta {
+  id: 'onboarding' | 'interpret' | 'chat' | 'refinement' | 'studio';
+  name: string;
+  tagline: string;
+  trigger: string;
+  model: string;
+  inputs: string[];
+  outputs: { label: string; when: string }[];
+  systemPrompt: string;
+  promptSourceFile: string;
+  nextAgents: string[];
+}
+
+export function getAgents() {
+  return fetchJson<{ agents: AgentMeta[] }>('/system/agents');
+}
+
 export function login(email: string, password: string) {
   return fetchJson<AuthResponse>('/auth/login', {
     method: 'POST',
