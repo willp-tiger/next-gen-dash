@@ -48,8 +48,8 @@ export function Sidebar({ activeTab, onTabChange, collapsed, onToggleCollapse, o
         </div>
         {!collapsed && (
           <div className="min-w-0">
-            <h1 className="text-sm font-bold text-white tracking-wide truncate">Sales Analytics</h1>
-            <span className="text-[10px] font-semibold text-accent-light uppercase tracking-widest">Enterprise</span>
+            <h1 className="text-sm font-bold text-white tracking-wide truncate">Meridian Industrial</h1>
+            <span className="text-[10px] font-semibold text-accent-light uppercase tracking-widest">Supply Chain</span>
           </div>
         )}
       </div>
